@@ -1,6 +1,6 @@
 # Release Checklist
 
-Use this checklist before tagging and publishing v0.1.0.
+Use this checklist before tagging and publishing a MailOps release. See [release-process.md](release-process.md) for SemVer, changelog, GitHub Release, PyPI, and repository visibility rules.
 
 ## Repository
 
@@ -15,6 +15,7 @@ Use this checklist before tagging and publishing v0.1.0.
 
 - [x] `pyproject.toml` version is `0.1.0`.
 - [x] `src/mailops/__init__.py` version is `0.1.0`.
+- [x] `CHANGELOG.md` includes `0.1.0` and uses SemVer release history.
 - [ ] Create a signed or annotated `v0.1.0` tag after final validation.
 
 ## Security
@@ -71,8 +72,7 @@ Inspect the built sdist/wheel before upload.
 ## Publish
 
 - [ ] Push the release branch.
-- [ ] Open a PR or review diff according to the chosen repo process.
-- [ ] Merge into the release branch.
 - [ ] Push tag `v0.1.0`.
-- [ ] Create GitHub release notes from [public-alpha.md](public-alpha.md).
-- [ ] Publish the package only after `twine check` passes and project URLs are correct.
+- [ ] Create a GitHub Release named `MailOps v0.1.0: Public Alpha` with markdown notes from [releases/v0.1.0.md](releases/v0.1.0.md).
+- [ ] Make the GitHub repository public only after security, license, changelog, and release docs are present.
+- [ ] Publish the package only after `twine check` passes, project URLs are correct, and PyPI credentials or trusted publishing are configured locally.

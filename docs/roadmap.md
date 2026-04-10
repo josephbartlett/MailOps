@@ -60,11 +60,12 @@ The live Windows-side Proton draft materialization path has been validated again
 - sample data
 - release preparation
 
-## Immediate next work
+## Immediate next work after v0.1.0
 
-1. Tighten docs around setup, safety model, and known limitations for a public alpha.
+1. Gather public alpha feedback without broadening the provider mutation surface.
 2. Add configurable sender-role heuristics and allow/block lists for triage.
 3. Add explicit Bridge profile health checks.
+4. Improve release automation while preserving explicit operator approval for publish steps.
 
 ## Next implementation slices
 
@@ -94,6 +95,6 @@ The live Windows-side Proton draft materialization path has been validated again
 
 ### Contributor experience
 
-- fixture mailbox dataset
+- more fixture mailbox scenarios
 - integration tests that do not require a live provider
-- release checklist and public alpha docs
+- release automation dry runs that never publish without operator approval

@@ -27,6 +27,8 @@ Do not commit, push, tag, publish, or change remotes unless the operator explici
 5. Confirm `.gitignore` excludes `.mailops/`, `.env`, caches, logs, DBs, and build output.
 6. Confirm `.env.example` and `examples/config.example.toml` contain no secrets.
 7. Confirm release notes state that send, delete, bulk mutation, and provider rule application are not implemented.
+8. Confirm `docs/release-process.md` documents SemVer, changelog, GitHub Release, PyPI, and visibility rules.
+9. Confirm the GitHub Release has a clear title and markdown body, preferably from `docs/releases/<version>.md`.
 
 ## Validation
 

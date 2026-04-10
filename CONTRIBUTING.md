@@ -40,3 +40,9 @@ PYTHONPATH=src python -m mailops.cli.main --help
 ```
 
 If Proton behavior changed, also verify Bridge discovery/listing from an environment where Proton Bridge is reachable.
+
+## Versioning and Changelog
+
+MailOps follows Semantic Versioning. Update `CHANGELOG.md` for user-visible fixes, features, safety-boundary changes, packaging changes, and release-process changes.
+
+Before publishing a release, follow `docs/release-process.md` and `docs/release-checklist.md`. Do not commit, push, tag, publish, change remotes, or change repository visibility unless the operator explicitly approves that exact action.

@@ -24,6 +24,7 @@ Every change should reinforce this operator loop:
 - Do not add silent send, delete, bulk archive, or auto-rule-application paths.
 - Do not log credentials, auth headers, or raw mailbox content casually.
 - Do not commit, push, tag, publish, change remotes, or otherwise mutate source-control or release state without explicit operator permission for that exact action.
+- If publishing a release, use an annotated SemVer tag, update `CHANGELOG.md`, and create a GitHub Release with a clear markdown title and description.
 
 ## Current architecture
 
@@ -79,6 +80,8 @@ For a Windows-side Proton Bridge continuation, start with `docs/windows-powershe
 
 - Update `README.md` when the user-visible workflow changes.
 - Update `docs/provider-proton.md` or `docs/provider-gmail.md` when adapter behavior changes.
+- Update `CHANGELOG.md` and version references when release behavior, packaging, or public API changes.
+- Follow [docs/release-process.md](docs/release-process.md) for SemVer, changelog, tagging, GitHub Release, PyPI, and repository visibility steps.
 - Keep examples in `.env.example` and `examples/config.example.toml` aligned with the code.
 
 ## License

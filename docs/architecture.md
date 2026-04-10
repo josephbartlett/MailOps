@@ -58,4 +58,4 @@ The current repository includes:
 
 1. configurable triage heuristics
 2. explicit Bridge profile health checks
-3. public alpha docs and release checklist
+3. richer audit export and release feedback hardening

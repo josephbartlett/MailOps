@@ -10,7 +10,7 @@ Operators buried in newsletters, invoices, client threads, and scheduling noise 
 
 - cross-account triage
 - follow-up detection
-- safe bulk actions
+- safe reviewed batch work
 - explainable automation
 - local control
 - auditability
@@ -145,7 +145,7 @@ The repository is organized around a few concrete runtime layers:
 
 - `mailops-core`: config, models, policies, actions, logging, exceptions
 - `mailops-adapter-proton`: Proton Bridge connectivity and Sieve artifacts
-- `mailops-adapter-gmail`: Gmail API connectivity and label actions
+- `mailops-adapter-gmail`: placeholder package for future Gmail API work
 - `mailops-index`: local SQLite state and query helpers
 - `mailops-cli`: operator-facing CLI
 - `mailops-agent`: natural-language planning into explicit actions
@@ -222,4 +222,8 @@ The full intended layout is reflected in the source tree and mirrored in the doc
 - harden public alpha feedback, triage heuristics, and provider-specific docs
 - keep Gmail out of scope until the Proton review/apply/audit loop is stable in public use
 
-See [docs/public-alpha.md](docs/public-alpha.md), [docs/release-checklist.md](docs/release-checklist.md), and [docs/roadmap.md](docs/roadmap.md).
+## Versioning and releases
+
+MailOps follows Semantic Versioning. Release history is tracked in [CHANGELOG.md](CHANGELOG.md), and release procedure is documented in [docs/release-process.md](docs/release-process.md).
+
+See [docs/public-alpha.md](docs/public-alpha.md), [docs/release-checklist.md](docs/release-checklist.md), [docs/release-process.md](docs/release-process.md), and [docs/roadmap.md](docs/roadmap.md).

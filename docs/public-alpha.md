@@ -103,3 +103,5 @@ sync -> inspect -> triage -> draft -> review -> apply -> audit
 ```
 
 The release remains intentionally narrow. Proton is the validated provider; Gmail stays out of scope until the Proton loop is stable in public use.
+
+The GitHub Release title is `MailOps v0.1.0: Public Alpha`. Use [releases/v0.1.0.md](releases/v0.1.0.md) as the markdown release body.

@@ -8,7 +8,7 @@ MailOps is Proton-first for the MVP because the local-first story is strongest w
 - saved non-secret Proton Bridge profiles under `.mailops/config/proton_accounts.json`
 - local IMAP folder listing through Proton Mail Bridge with provider-aware role/capability detection
 - bounded initial sync of recent messages from selected folders
-- UID-based incremental sync after the initial cursor is established
+- UID-based incremental sync after the initial cursor is established, with cursor advancement held behind failed fetches
 - normalization of accounts, folders, threads, and messages into SQLite
 - canonical mailbox consolidation across aliases when `canonical_email` is set
 - multi-profile sync in one CLI invocation through `mailops sync --profile all`
