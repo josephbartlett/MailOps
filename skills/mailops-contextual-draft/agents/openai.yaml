@@ -1,0 +1,4 @@
+interface:
+  display_name: "MailOps Contextual Draft"
+  short_description: "Draft email from repo context"
+  default_prompt: "Use $mailops-contextual-draft to draft an email from this repo context."

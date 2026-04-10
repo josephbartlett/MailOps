@@ -1,0 +1,4 @@
+interface:
+  display_name: "MailOps Product Development"
+  short_description: "Build MailOps features safely"
+  default_prompt: "Use $mailops-product-development to modify MailOps safely."

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mailops"
+version = "0.1.0"
+description = "Local-first inbox operations harness for serious multi-account email workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Joey Bartlett" },
+]
+keywords = ["email", "cli", "operations", "proton", "gmail", "local-first"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: Email",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Monitoring",
+]
+dependencies = [
+  "pydantic>=2.8,<3.0",
+  "rich>=13.7,<14.0",
+  "typer>=0.12.3,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2,<9.0",
+]
+
+[project.scripts]
+mailops = "mailops.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/josephbartlett/MailOps"
+Repository = "https://github.com/josephbartlett/MailOps"
+Documentation = "https://github.com/josephbartlett/MailOps/tree/main/docs"
+"Issue Tracker" = "https://github.com/josephbartlett/MailOps/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mailops"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

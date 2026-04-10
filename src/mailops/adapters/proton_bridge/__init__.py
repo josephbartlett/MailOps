@@ -1,0 +1,2 @@
+"""Proton Bridge adapter package."""
+

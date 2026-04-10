@@ -1,0 +1,4 @@
+interface:
+  display_name: "MailOps Email Context"
+  short_description: "Bring email into Codex context"
+  default_prompt: "Use $mailops-email-context to find the email context for this task."

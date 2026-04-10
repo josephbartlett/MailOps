@@ -1,0 +1,4 @@
+interface:
+  display_name: "MailOps Public Release"
+  short_description: "Prepare MailOps alpha releases"
+  default_prompt: "Use $mailops-public-release to prepare a MailOps release."

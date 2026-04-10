@@ -1,0 +1,4 @@
+interface:
+  display_name: "MailOps Proton Validation"
+  short_description: "Validate Proton Bridge workflows"
+  default_prompt: "Use $mailops-proton-validation to validate Proton Bridge workflows."

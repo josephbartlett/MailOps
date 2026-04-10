@@ -1,0 +1,4 @@
+interface:
+  display_name: "MailOps Draft Review"
+  short_description: "Review and materialize drafts"
+  default_prompt: "Use $mailops-draft-review to review and materialize a MailOps draft."
