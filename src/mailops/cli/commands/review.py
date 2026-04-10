@@ -124,10 +124,12 @@ def batch_show_command(batch_id: str = typer.Argument(..., help="Review batch id
     draft_table.add_column("Style")
     draft_table.add_column("Account")
     draft_table.add_column("To")
+    draft_table.add_column("Cc")
+    draft_table.add_column("Bcc")
     draft_table.add_column("Subject")
     draft_table.add_column("Confidence")
     if not batch.draft_proposals:
-        draft_table.add_row("(none)", "-", "-", "-", "-", "-")
+        draft_table.add_row("(none)", "-", "-", "-", "-", "-", "-", "-")
     else:
         for draft in batch.draft_proposals:
             draft_table.add_row(
@@ -135,6 +137,8 @@ def batch_show_command(batch_id: str = typer.Argument(..., help="Review batch id
                 draft.style_profile,
                 draft.account_id or "-",
                 safe_console_text(", ".join(draft.to_recipients) or "-", runtime.console),
+                safe_console_text(", ".join(draft.cc_recipients) or "-", runtime.console),
+                safe_console_text(", ".join(draft.bcc_recipients) or "-", runtime.console),
                 safe_console_text(draft.proposed_subject, runtime.console),
                 f"{draft.confidence:.0%}",
             )
@@ -148,6 +152,8 @@ def batch_show_command(batch_id: str = typer.Argument(..., help="Review batch id
                 f"draft_id={safe_console_text(draft.id, runtime.console)} "
                 f"account={safe_console_text(draft.account_id or '-', runtime.console)} "
                 f"to={safe_console_text(', '.join(draft.to_recipients) or '-', runtime.console)} "
+                f"cc={safe_console_text(', '.join(draft.cc_recipients) or '-', runtime.console)} "
+                f"bcc={safe_console_text(', '.join(draft.bcc_recipients) or '-', runtime.console)} "
                 f"subject={safe_console_text(draft.proposed_subject, runtime.console)}"
             )
         body_table = Table(title="Draft Bodies")
@@ -167,10 +173,13 @@ def batch_show_command(batch_id: str = typer.Argument(..., help="Review batch id
     provider_draft_table.add_column("Status")
     provider_draft_table.add_column("Mailbox")
     provider_draft_table.add_column("UID")
+    provider_draft_table.add_column("To")
+    provider_draft_table.add_column("Cc")
+    provider_draft_table.add_column("Bcc")
     provider_draft_table.add_column("Subject")
     provider_draft_table.add_column("Synced")
     if not batch.provider_drafts:
-        provider_draft_table.add_row("(none)", "-", "-", "-", "-", "-")
+        provider_draft_table.add_row("(none)", "-", "-", "-", "-", "-", "-", "-", "-")
     else:
         for draft in batch.provider_drafts:
             provider_draft_table.add_row(
@@ -178,6 +187,9 @@ def batch_show_command(batch_id: str = typer.Argument(..., help="Review batch id
                 draft.status,
                 draft.mailbox,
                 str(draft.uid) if draft.uid is not None else "-",
+                safe_console_text(", ".join(draft.to_recipients) or "-", runtime.console),
+                safe_console_text(", ".join(draft.cc_recipients) or "-", runtime.console),
+                safe_console_text(", ".join(draft.bcc_recipients) or "-", runtime.console),
                 safe_console_text(draft.subject, runtime.console),
                 draft.synced_at.isoformat(),
             )
@@ -217,6 +229,8 @@ def batch_sync_drafts_command(
     )
     for error in result.errors:
         runtime.console.print(f"Sync note: {error}")
+    if result.failed_drafts:
+        raise typer.Exit(1)
 
 
 review_app.add_typer(batch_app, name="batch")

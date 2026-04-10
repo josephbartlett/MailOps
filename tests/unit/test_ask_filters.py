@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from mailops.cli.commands.ask import _filter_followup_rows, _older_than_days_from_prompt
+from mailops.cli.commands.ask import _filter_followup_rows, _lookback_days_from_prompt, _older_than_days_from_prompt
+from mailops.agent.planner import compile_request
 
 
 def test_filter_followup_rows_excludes_recruiter_and_logistics_for_client_prompt() -> None:
@@ -60,3 +61,19 @@ def test_filter_followup_rows_keeps_only_scheduling_threads_for_scheduling_promp
 
 def test_older_than_days_from_prompt_supports_explicit_days() -> None:
     assert _older_than_days_from_prompt("show unanswered threads older than 14 days") == 14
+
+
+def test_older_than_days_from_prompt_ignores_general_followup_prompts() -> None:
+    assert _older_than_days_from_prompt("show unanswered finance threads") is None
+
+
+def test_lookback_days_from_prompt_defaults_to_this_week_window() -> None:
+    assert _lookback_days_from_prompt("show unanswered finance threads") == 7
+    assert _lookback_days_from_prompt("show unanswered threads this week") == 7
+    assert _lookback_days_from_prompt("show unanswered threads 2d") == 2
+
+
+def test_planner_treats_draft_a_sieve_rule_as_rule_preview() -> None:
+    plan = compile_request("draft a sieve rule for messages from vendor.example to label Finance")
+
+    assert plan.intent == "rule_generation"

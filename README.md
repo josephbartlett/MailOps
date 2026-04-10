@@ -70,8 +70,10 @@ mailops ask "draft replies for scheduling emails from this week"
 mailops draft create --from-account operator@example.com --to stakeholder@example.com --subject "Project update" --body-file draft.md --context-ref repo:current
 mailops review batch list
 mailops ask "show unanswered client threads older than 2 days"
-MAILOPS_PROTON_PASSWORD=bridge-password mailops apply batch_001
-MAILOPS_PROTON_PASSWORD=bridge-password mailops review batch sync-drafts batch_001
+# Set MAILOPS_PROTON_PASSWORD only in the current shell before live Bridge writes.
+mailops review batch show batch_001
+mailops apply batch_001
+mailops review batch sync-drafts batch_001
 mailops rules propose "filter future messages from vendor.example to label Finance"
 mailops export audit --format markdown
 ```
@@ -86,7 +88,8 @@ mailops doctor
 mailops demo seed
 mailops connect proton --list-folders
 mailops connect proton --profile profile-name --list-folders
-MAILOPS_PROTON_PASSWORD=bridge-password mailops sync --provider proton --profile all --folder "All Mail" --limit 50
+# Set MAILOPS_PROTON_PASSWORD only in the current shell before live Bridge sync.
+mailops sync --provider proton --profile all --folder "All Mail" --limit 50
 mailops sync --provider proton --folder INBOX
 mailops status
 mailops search "invoice"
@@ -168,10 +171,10 @@ MailOps can persist non-secret Proton Bridge settings for each mailbox under `.m
 mailops connect proton --username operator@example.com --account-email operator@example.com --save-profile work
 mailops connect proton --username alias@example.com --account-email alias@example.com --canonical-email operator@example.com --save-profile alias
 mailops connect proton --list-profiles
-MAILOPS_PROTON_PASSWORD=bridge-password mailops sync --provider proton --profile all --folder "All Mail" --limit 50
+mailops sync --provider proton --profile all --folder "All Mail" --limit 50
 ```
 
-Passwords are intentionally not persisted. Use `MAILOPS_PROTON_PASSWORD` or `--password` when syncing saved profiles.
+Passwords are intentionally not persisted. Use `MAILOPS_PROTON_PASSWORD` or `--password` only as transient runtime input when syncing saved profiles or materializing reviewed drafts.
 
 ### WSL and Windows Bridge
 
@@ -216,6 +219,7 @@ The full intended layout is reflected in the source tree and mirrored in the doc
 
 ## Near-term roadmap
 
-- prepare public alpha docs and release checklist
+- harden public alpha feedback, triage heuristics, and provider-specific docs
+- keep Gmail out of scope until the Proton review/apply/audit loop is stable in public use
 
 See [docs/public-alpha.md](docs/public-alpha.md), [docs/release-checklist.md](docs/release-checklist.md), and [docs/roadmap.md](docs/roadmap.md).

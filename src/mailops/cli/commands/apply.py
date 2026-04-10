@@ -21,12 +21,12 @@ def apply_command(
     runtime = build_runtime()
     if batch_id is None:
         runtime.console.print("Provide a batch id to apply. High-risk actions remain blocked by default.")
-        return
+        raise typer.Exit(1)
 
     batch = get_review_batch(runtime.config, batch_id)
     if batch is None:
         runtime.console.print(f"Batch '{batch_id}' was not found. Nothing was applied.")
-        return
+        raise typer.Exit(1)
 
     result = execute_review_batch(
         runtime.config,
@@ -42,17 +42,17 @@ def apply_command(
     )
     if result is None:
         runtime.console.print(f"Batch '{batch_id}' was not found. Nothing was applied.")
-        return
+        raise typer.Exit(1)
     approved = get_review_batch(runtime.config, batch_id)
     if approved is None:
         runtime.console.print(f"Batch '{batch_id}' was not found after execution. Nothing was applied.")
-        return
+        raise typer.Exit(1)
     if approved.highest_risk.value == "high":
         runtime.console.print(f"Batch '{batch_id}' remains blocked because it contains high-risk actions.")
-        return
+        raise typer.Exit(1)
     if approved.status == "rolled_back":
         runtime.console.print(f"Batch '{batch_id}' was already rolled back and cannot be applied.")
-        return
+        raise typer.Exit(1)
 
     if result.executed_actions:
         runtime.console.print(
@@ -70,3 +70,5 @@ def apply_command(
         )
     for error in result.errors:
         runtime.console.print(f"Execution note: {error}")
+    if result.failed_actions:
+        raise typer.Exit(1)

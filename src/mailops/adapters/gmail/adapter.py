@@ -9,8 +9,7 @@ class GmailApiAdapter:
     """Provider-aware shell for future Gmail API support."""
 
     provider_name = "gmail_api"
-    capabilities = AdapterCapabilities(sync=True, drafts=True, send=True, labels=True, rules=False)
+    capabilities = AdapterCapabilities(sync=False, drafts=False, send=False, labels=False, rules=False)
 
     def describe(self) -> str:
         return "Gmail API adapter shell for OAuth-based mailbox operations."
-

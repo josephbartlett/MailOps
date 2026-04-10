@@ -8,7 +8,6 @@ MailOps will use the Gmail API directly rather than forcing Gmail into an IMAP-f
 - message and thread access
 - label management
 - draft creation
-- sending with explicit user approval
 - incremental sync support
 
 ## Design notes
@@ -19,5 +18,4 @@ MailOps will use the Gmail API directly rather than forcing Gmail into an IMAP-f
 
 ## Current status
 
-The Gmail adapter modules in this scaffold are placeholders intended to receive the first OAuth and sync implementation in a later milestone.
-
+The Gmail adapter modules in this scaffold are placeholders intended to receive the first OAuth and sync implementation in a later milestone. Runtime capabilities are declared as unavailable until implementation and review gates exist.

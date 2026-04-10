@@ -279,13 +279,20 @@ class ProtonBridgeAdapter:
                         result.warnings.append(warning)
 
                     latest_uid = prior_last_uid
+                    failed_fetch_uids: list[int] = []
                     for uid in selected_uids:
                         status, fetch_data = client.uid("FETCH", str(uid), "(UID FLAGS INTERNALDATE RFC822)")
                         if status != "OK":
                             result.errors.append(f"Failed to fetch UID {uid} from '{folder.name}'.")
+                            failed_fetch_uids.append(uid)
                             continue
 
-                        parsed_uid, flags, internal_date, raw_message = parse_fetch_response(fetch_data)
+                        try:
+                            parsed_uid, flags, internal_date, raw_message = parse_fetch_response(fetch_data)
+                        except ValueError as exc:
+                            result.errors.append(f"Failed to parse UID {uid} from '{folder.name}': {exc}")
+                            failed_fetch_uids.append(uid)
+                            continue
                         normalized = normalize_imap_message(
                             account_id=account_id,
                             account_email=account_email,
@@ -342,6 +349,13 @@ class ProtonBridgeAdapter:
                         if inserted:
                             result.messages_indexed += 1
                         latest_uid = max(latest_uid, normalized.uid)
+
+                    if failed_fetch_uids:
+                        earliest_failed_uid = min(failed_fetch_uids)
+                        latest_uid = max(prior_last_uid, earliest_failed_uid - 1)
+                        result.warnings.append(
+                            f"Cursor for '{folder.name}' was not advanced past failed UID {earliest_failed_uid}; run sync again to retry."
+                        )
 
                     upsert_folder(
                         connection,

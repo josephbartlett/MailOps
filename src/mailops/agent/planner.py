@@ -12,20 +12,6 @@ def compile_request(prompt: str) -> AskPlan:
 
     lowered = prompt.lower()
 
-    if any(token in lowered for token in ("draft", "reply", "respond")):
-        return AskPlan(
-            request=prompt,
-            intent="draft_queue",
-            summary="Prepare local draft proposals for operator review.",
-            actions=[
-                ActionRequest(
-                    type=ActionType.CREATE_DRAFT,
-                    reason="Draft generation is medium risk because it creates provider-adjacent content for review.",
-                    risk_level=RiskTier.MEDIUM,
-                )
-            ],
-        )
-
     if any(token in lowered for token in ("rule", "filter", "sieve")):
         return AskPlan(
             request=prompt,
@@ -35,6 +21,20 @@ def compile_request(prompt: str) -> AskPlan:
                 ActionRequest(
                     type=ActionType.PROPOSE_RULE,
                     reason="Rule proposals are medium risk until preview and approval happen.",
+                    risk_level=RiskTier.MEDIUM,
+                )
+            ],
+        )
+
+    if any(token in lowered for token in ("draft", "reply", "respond")):
+        return AskPlan(
+            request=prompt,
+            intent="draft_queue",
+            summary="Prepare local draft proposals for operator review.",
+            actions=[
+                ActionRequest(
+                    type=ActionType.CREATE_DRAFT,
+                    reason="Draft generation is medium risk because it creates provider-adjacent content for review.",
                     risk_level=RiskTier.MEDIUM,
                 )
             ],
@@ -80,4 +80,3 @@ def compile_request(prompt: str) -> AskPlan:
             )
         ],
     )
-

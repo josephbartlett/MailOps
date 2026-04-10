@@ -88,24 +88,26 @@ def get_review_batch(config: AppConfig, batch_id: str) -> ReviewBatchDetail | No
             draft_rows = connection.execute(
                 f"""
                 SELECT
-                    id,
-                    thread_id,
-                    account_id,
-                    to_recipients,
-                    cc_recipients,
-                    bcc_recipients,
-                    in_reply_to,
-                    reference_message_ids,
-                    context_refs,
-                    style_profile,
-                    proposed_subject,
-                    proposed_body,
-                    confidence,
-                    rationale,
-                    created_at
+                    draft_proposals.id AS id,
+                    draft_proposals.thread_id AS thread_id,
+                    COALESCE(NULLIF(draft_proposals.account_id, ''), threads.account_id) AS account_id,
+                    draft_proposals.to_recipients AS to_recipients,
+                    draft_proposals.cc_recipients AS cc_recipients,
+                    draft_proposals.bcc_recipients AS bcc_recipients,
+                    draft_proposals.in_reply_to AS in_reply_to,
+                    draft_proposals.reference_message_ids AS reference_message_ids,
+                    draft_proposals.context_refs AS context_refs,
+                    draft_proposals.style_profile AS style_profile,
+                    draft_proposals.proposed_subject AS proposed_subject,
+                    draft_proposals.proposed_body AS proposed_body,
+                    draft_proposals.confidence AS confidence,
+                    draft_proposals.rationale AS rationale,
+                    draft_proposals.created_at AS created_at
                 FROM draft_proposals
-                WHERE id IN ({placeholders})
-                ORDER BY created_at ASC, id ASC
+                LEFT JOIN threads
+                  ON threads.id = draft_proposals.thread_id
+                WHERE draft_proposals.id IN ({placeholders})
+                ORDER BY draft_proposals.created_at ASC, draft_proposals.id ASC
                 """,
                 tuple(draft_ids),
             ).fetchall()

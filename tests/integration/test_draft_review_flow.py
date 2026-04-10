@@ -26,6 +26,9 @@ from mailops.review.execution import execute_review_batch
 from mailops.review.provider_drafts import sync_review_batch_provider_drafts
 
 
+runner = CliRunner()
+
+
 def _seed_waiting_on_me_thread(config: AppConfig) -> str:
     initialize_database(config)
     thread_id = "thread_sched_001"
@@ -320,3 +323,51 @@ def test_custom_draft_review_batch_materializes_provider_draft(tmp_path, monkeyp
     assert synced_batch is not None
     assert synced_batch.provider_drafts[0].subject == "Project update"
     assert synced_batch.provider_drafts[0].to_recipients == ["client@example.com"]
+
+
+def test_review_batch_show_renders_full_custom_draft_envelope(tmp_path, monkeypatch) -> None:
+    home = tmp_path / ".mailops"
+    monkeypatch.setenv("MAILOPS_HOME", str(home))
+    config = AppConfig(home_dir=home)
+    initialize_database(config)
+    with connect_db(config.db_path) as connection:
+        upsert_account(
+            connection,
+            account_id="ops@example.com",
+            provider="proton_bridge",
+            display_name="ops@example.com",
+            email_address="ops@example.com",
+            sync_status="ready",
+        )
+        upsert_account_alias(
+            connection,
+            alias_email="ops@example.com",
+            account_id="ops@example.com",
+            provider_username="ops@example.com",
+            is_primary=True,
+        )
+
+    created = create_custom_draft_review_batch(
+        config,
+        CustomDraftRequest(
+            account_id="ops@example.com",
+            to_recipients=["client@example.com"],
+            cc_recipients=["lead@example.com"],
+            bcc_recipients=["hidden@example.com"],
+            subject="Project update",
+            body_text="Review-first draft body.",
+            context_refs=["repo:MailOps"],
+        ),
+    )
+
+    batch = get_review_batch(config, created.batch_id)
+    assert batch is not None
+    assert "cc:lead@example.com" in batch.actions[0].scope
+    assert "bcc:hidden@example.com" in batch.actions[0].scope
+
+    result = runner.invoke(app, ["review", "batch", "show", created.batch_id])
+
+    assert result.exit_code == 0, result.output
+    assert "client@example.com" in result.output
+    assert "lead@example.com" in result.output
+    assert "hidden@example.com" in result.output

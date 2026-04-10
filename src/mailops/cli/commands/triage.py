@@ -17,13 +17,13 @@ def triage_command(
     """Show threads likely waiting on the operator."""
 
     runtime = build_runtime()
-    older_than_days = parse_relative_days(since)
+    since_days = parse_relative_days(since)
     refresh_thread_triage(runtime.config, account_id=account)
     summary = summarize_followup_states(runtime.config, account_id=account)
     threads = list_triage_threads(
         runtime.config,
-        older_than_days=older_than_days,
         account_id=account,
+        since_days=since_days,
         states=("waiting_on_me",),
         limit=20,
     )

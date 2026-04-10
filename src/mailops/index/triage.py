@@ -507,15 +507,15 @@ def refresh_thread_triage(
 def list_triage_threads(
     config: AppConfig,
     *,
-    older_than_days: int,
     account_id: str,
+    older_than_days: int | None = None,
+    since_days: int | None = None,
     states: Sequence[str] | None = None,
     limit: int = 20,
 ) -> list[dict[str, object]]:
     """Return ranked triage rows from local thread state."""
 
     initialize_database(config)
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
     sql = """
         SELECT
             id,
@@ -528,9 +528,16 @@ def list_triage_threads(
             classification_tags
         FROM threads
         WHERE last_message_at IS NOT NULL
-          AND last_message_at <= ?
     """
-    parameters: list[object] = [cutoff]
+    parameters: list[object] = []
+    if since_days is not None and since_days > 0:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days)).isoformat()
+        sql += " AND last_message_at >= ?"
+        parameters.append(cutoff)
+    if older_than_days is not None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+        sql += " AND last_message_at <= ?"
+        parameters.append(cutoff)
     if account_id != "all":
         sql += " AND account_id = ?"
         parameters.append(account_id)
@@ -538,7 +545,8 @@ def list_triage_threads(
         placeholders = ", ".join("?" for _ in states)
         sql += f" AND followup_state IN ({placeholders})"
         parameters.extend(states)
-    sql += " ORDER BY importance_score DESC, last_message_at ASC LIMIT ?"
+    sort_direction = "ASC" if older_than_days is not None and since_days is None else "DESC"
+    sql += f" ORDER BY importance_score DESC, last_message_at {sort_direction} LIMIT ?"
     parameters.append(limit)
 
     with connect_db(config.db_path) as connection:

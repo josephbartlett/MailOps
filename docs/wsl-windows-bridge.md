@@ -37,8 +37,8 @@ Relevant rows:
 
 - `wsl`: whether MailOps thinks it is running inside WSL
 - `proton_bridge_hosts`: host candidates MailOps will try
-- `proton_imap:<host>`: whether Bridge IMAP is reachable on port `1143`
-- `proton_smtp:<host>`: whether Bridge SMTP is reachable on port `1025`
+- `proton_imap:<profile-or-default>:<host>:<port>`: whether Bridge IMAP is reachable
+- `proton_smtp:<profile-or-default>:<host>:<port>`: whether Bridge SMTP is reachable
 
 No credentials are sent by these checks. They only open a TCP connection.
 
@@ -56,13 +56,16 @@ mailops connect proton \
 Verify folders:
 
 ```bash
-MAILOPS_PROTON_PASSWORD=bridge-password mailops connect proton --profile work --list-folders
+read -rsp "Proton Bridge password: " MAILOPS_PROTON_PASSWORD
+echo
+export MAILOPS_PROTON_PASSWORD
+mailops connect proton --profile work --list-folders
 ```
 
 Sync a bounded slice:
 
 ```bash
-MAILOPS_PROTON_PASSWORD=bridge-password mailops sync --provider proton --profile work --folder "All Mail" --limit 50
+mailops sync --provider proton --profile work --folder "All Mail" --limit 50
 ```
 
 Create and review drafts locally:
@@ -76,7 +79,9 @@ mailops review batch show batch_xxxxxxxx
 Apply a reviewed draft batch to Proton Drafts:
 
 ```bash
-MAILOPS_PROTON_PASSWORD=bridge-password mailops apply batch_xxxxxxxx
+mailops apply batch_xxxxxxxx
+mailops review batch sync-drafts batch_xxxxxxxx
+unset MAILOPS_PROTON_PASSWORD
 ```
 
 ## Troubleshooting
@@ -86,7 +91,7 @@ If `mailops doctor` shows `127.0.0.1` as unreachable but a Windows host IP as re
 If all Bridge hosts are unreachable:
 
 - confirm Proton Mail Bridge is running on Windows
-- confirm Bridge shows IMAP port `1143` and SMTP port `1025`
+- confirm Bridge shows the same IMAP and SMTP ports that `mailops doctor` reports for the saved profile
 - confirm Windows firewall is not blocking WSL access to Bridge
 - try WSL mirrored networking if your Windows and WSL versions support it
 - run MailOps from Windows Python for provider write-path validation if Windows only exposes Bridge on its own loopback interface

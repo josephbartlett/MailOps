@@ -30,7 +30,7 @@ proton_imap:172.25.96.1: timed out
 proton_smtp:172.25.96.1: timed out
 ```
 
-Latest local MailOps state:
+Example local MailOps state from the earlier handoff:
 
 ```text
 accounts: 2
@@ -50,9 +50,9 @@ lm-main -> primary Proton Bridge profile
 lm-info -> secondary Proton Bridge profile
 ```
 
-There are no pending review batches. A new draft batch must be created before testing `mailops apply`.
+Run `py -m mailops.cli.main status` and `py -m mailops.cli.main review batch list` before testing `mailops apply`; do not assume an earlier session has no pending review batches.
 
-WSL `git status` currently reports this directory is not inside a Git repository. Check from Windows PowerShell before making release-oriented assumptions:
+Windows `git status` should be checked before making release-oriented assumptions:
 
 ```powershell
 git status --short
@@ -62,13 +62,10 @@ git status --short
 
 The current roadmap is tracked in [roadmap.md](roadmap.md). The most important next slices are:
 
-1. Validate live Proton draft materialization from Windows PowerShell.
-2. Add draft syncback or provider draft lookup so local state can show richer context for created Proton drafts.
-3. Improve Proton folder capability detection for Drafts, Sent, Archive, Trash, and All Mail.
-4. Add Proton Sieve rule proposal generation and preview.
-5. Add configurable sender-role heuristics and allow/block lists for triage.
-6. Add a seeded demo mailbox dataset for contributors without Proton Bridge.
-7. Prepare public alpha docs: setup, safety model, known limitations, and release checklist.
+1. Keep public alpha release actions review-first and operator-approved.
+2. Add configurable sender-role heuristics and allow/block lists for triage.
+3. Continue hardening Proton Bridge edge cases discovered during live validation.
+4. Start Gmail only after the Proton operator loop is stable in public use.
 
 Do not start Gmail until the Proton operator loop is validated end to end.
 
@@ -86,7 +83,7 @@ py -m pytest
 Expected result:
 
 ```text
-55 passed
+73 passed
 ```
 
 Run the local status checks:
@@ -194,7 +191,7 @@ Context:
 - MailOps is a local-first inbox operations harness.
 - Proton Bridge is installed and running on Windows.
 - WSL could sync local state earlier but cannot currently reach Windows Bridge ports.
-- Current local state has 2 accounts, 29 threads, 50 messages, and 0 review batches.
+- Check current local state with `py -m mailops.cli.main status`; do not assume counts from an earlier session.
 - Provider-backed draft materialization is implemented via IMAP APPEND into Proton Drafts.
 - Sending is not implemented and must not be added for this validation.
 - Rollback is blocked once provider-side drafts exist.
@@ -206,7 +203,7 @@ Start:
 4. py -m pytest
 5. py -m mailops.cli.main doctor
 6. py -m mailops.cli.main connect proton --list-profiles
-7. Set $env:MAILOPS_PROTON_PASSWORD to the Bridge-generated password.
+7. Set $env:MAILOPS_PROTON_PASSWORD from a secure prompt with the Bridge-generated password.
 8. py -m mailops.cli.main connect proton --profile lm-main --list-folders
 
 Then:
@@ -215,7 +212,8 @@ Then:
 3. Apply it with `py -m mailops.cli.main apply <batch_id>`.
 4. Verify the batch status is executed and the action has a provider_ref.
 5. Confirm the draft appears in Proton Drafts.
-6. Export audit with `py -m mailops.cli.main export audit --format markdown`.
+6. Sync provider draft metadata with `py -m mailops.cli.main review batch sync-drafts <batch_id>`.
+7. Export audit with `py -m mailops.cli.main export audit --format markdown`.
 
 Safety:
 - Do not send mail.
@@ -226,5 +224,5 @@ Safety:
 
 After live validation:
 - Continue with `docs/roadmap.md`.
-- Prioritize Proton draft syncback, Proton folder capability detection, and Sieve rule proposals before Gmail.
+- Do not commit, push, tag, publish, or change remotes unless the operator explicitly approves that exact source-control action.
 ```

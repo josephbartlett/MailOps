@@ -52,7 +52,7 @@ def draft_create_command(
     runtime = build_runtime()
     if body is not None and body_file is not None:
         runtime.console.print("Use either --body or --body-file, not both.")
-        return
+        raise typer.Exit(1)
     if body_file is not None:
         body_text = body_file.read_text(encoding="utf-8")
     else:
@@ -74,10 +74,14 @@ def draft_create_command(
         )
     except ValueError as exc:
         runtime.console.print(str(exc))
-        return
+        raise typer.Exit(1) from exc
 
     runtime.console.print(
         f"Created review batch `{result.batch_id}` with custom draft `{result.draft_id}` "
         f"from `{result.account_id}` to {', '.join(result.to_recipients)}."
     )
+    if result.cc_recipients:
+        runtime.console.print(f"Cc: {', '.join(result.cc_recipients)}")
+    if result.bcc_recipients:
+        runtime.console.print(f"Bcc: {', '.join(result.bcc_recipients)}")
     runtime.console.print(f"Inspect it with `mailops review batch show {result.batch_id}`.")

@@ -25,7 +25,7 @@ Confirm:
 
 - `highest_risk` is acceptable for a draft action
 - every action type is `create_draft`
-- draft recipients and subjects are expected
+- draft account, To, Cc, Bcc, subject, and body are expected
 - batch status is `pending` before apply
 - no action resembles send, delete, archive, bulk move, or rule application
 

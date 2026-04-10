@@ -59,4 +59,4 @@ mailops apply <batch_id>
 mailops review batch sync-drafts <batch_id>
 ```
 
-`draft create` records recipients, subject, body, and context refs in local state. `apply` may materialize that proposal as a Proton Draft after review; it does not send the message.
+`draft create` records To, Cc, Bcc, subject, body, and context refs in local state. `review batch show` displays that envelope before apply. `apply` may materialize that proposal as a Proton Draft after review; it does not send the message.

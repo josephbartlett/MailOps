@@ -25,6 +25,7 @@ sync -> inspect -> triage -> draft -> review -> apply -> audit
 - Keep high-risk actions review-first.
 - Do not add silent send, delete, bulk archive, bulk move, or auto-rule-application paths.
 - Do not log credentials, auth headers, or raw mailbox content casually.
+- Do not commit, push, tag, publish, or change remotes unless the operator explicitly approves that exact source-control action.
 - Compile natural-language behavior into explicit structured actions, queries, or review batches.
 
 ## Code Patterns

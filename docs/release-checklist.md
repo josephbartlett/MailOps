@@ -5,10 +5,11 @@ Use this checklist before tagging and publishing v0.1.0.
 ## Repository
 
 - [ ] Confirm `C:\Users\decoy\MailOps` is inside the intended Git repository.
-- [ ] Add the user-provided remote origin.
+- [ ] Confirm the remote origin is `https://github.com/josephbartlett/MailOps`.
 - [ ] Update `pyproject.toml` `[project.urls]` with the actual repository, documentation, and issue tracker URLs.
 - [ ] Confirm no local-only state is staged: `.mailops/`, caches, logs, and temporary screenshots must stay out of the release.
 - [ ] Confirm license ownership is still Joey Bartlett and MIT.
+- [ ] Do not commit, push, tag, publish, or change remotes unless the operator explicitly approves that exact source-control action.
 
 ## Version
 
@@ -44,12 +45,17 @@ py -m mailops.cli.main rules propose "filter future messages from vendor.example
 Optional live Proton validation:
 
 ```powershell
-$env:MAILOPS_PROTON_PASSWORD = "<bridge-password>"
+$secure = Read-Host "Proton Bridge password" -AsSecureString
+$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+$env:MAILOPS_PROTON_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
 py -m mailops.cli.main connect proton --profile lm-main --list-folders
 py -m mailops.cli.main sync --profile lm-main --folder INBOX --limit 10
 py -m mailops.cli.main draft create --from-account <operator@example.com> --to <stakeholder@example.com> --subject "Release validation draft" --body "Draft body" --context-ref release:v0.1.0
+py -m mailops.cli.main review batch show batch_xxxxxxxx
+py -m mailops.cli.main apply batch_xxxxxxxx
 py -m mailops.cli.main review batch sync-drafts batch_xxxxxxxx
 Remove-Item Env:MAILOPS_PROTON_PASSWORD
+[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 ```
 
 ## Package Build

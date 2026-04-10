@@ -1,6 +1,6 @@
 # Public Alpha Guide
 
-MailOps v0.1.0 is a local-first, review-first inbox operations harness. It is ready for a public alpha when the release checklist in [release-checklist.md](release-checklist.md) is complete and the repository remote metadata has been set.
+MailOps v0.1.0 is a local-first, review-first inbox operations harness. It is ready for a public alpha when the release checklist in [release-checklist.md](release-checklist.md) is complete and the operator explicitly approves the release source-control actions.
 
 ## What Works
 
@@ -67,10 +67,12 @@ mailops export audit --format markdown
 
 Use the Proton Bridge-generated IMAP username and password, not the Proton account password.
 
-```bash
+```powershell
 mailops doctor
 mailops connect proton --username operator@example.com --account-email operator@example.com --save-profile work
-$env:MAILOPS_PROTON_PASSWORD = "<bridge-password>"
+$secure = Read-Host "Proton Bridge password" -AsSecureString
+$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+$env:MAILOPS_PROTON_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
 mailops connect proton --profile work --list-folders
 mailops sync --profile work --folder INBOX --limit 25
 mailops search "project update"
@@ -89,6 +91,7 @@ Clear the password after the live session:
 
 ```powershell
 Remove-Item Env:MAILOPS_PROTON_PASSWORD
+[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 ```
 
 ## Release Notes Summary

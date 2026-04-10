@@ -16,6 +16,7 @@ sync -> inspect -> triage -> draft -> review -> apply -> audit
 ```
 
 Do not broaden release scope by adding Gmail, send, delete, bulk archive, bulk move, or provider rule application.
+Do not commit, push, tag, publish, or change remotes unless the operator explicitly approves that exact source-control action.
 
 ## Checklist
 
@@ -66,7 +67,7 @@ Examples:
 
 ```powershell
 Select-String -Path pyproject.toml,src/**/*.py,README.md,docs/**/*.md,examples/**/*,.env.example -SimpleMatch "0.1.0a0"
-Select-String -Path examples/config.example.toml -SimpleMatch 'password = "bridge-password"'
+Select-String -Path examples/config.example.toml -Pattern 'password\\s*=\\s*".+"'
 ```
 
 ## Publish Handoff

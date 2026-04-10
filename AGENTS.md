@@ -23,6 +23,7 @@ Every change should reinforce this operator loop:
 - High-risk actions stay review-first.
 - Do not add silent send, delete, bulk archive, or auto-rule-application paths.
 - Do not log credentials, auth headers, or raw mailbox content casually.
+- Do not commit, push, tag, publish, change remotes, or otherwise mutate source-control or release state without explicit operator permission for that exact action.
 
 ## Current architecture
 

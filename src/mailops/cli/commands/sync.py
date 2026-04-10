@@ -184,7 +184,7 @@ def sync_command(
     selected_provider = (provider or runtime.config.default_provider).strip().lower()
     if selected_provider in {"gmail", "gmail_api"}:
         runtime.console.print("Gmail sync is not implemented yet.")
-        return
+        raise typer.Exit(1)
 
     if selected_provider not in {"proton", "proton_bridge"}:
         raise typer.BadParameter("supported sync providers: proton, proton_bridge, gmail, gmail_api")
@@ -211,7 +211,7 @@ def sync_command(
         )
     except typer.BadParameter as exc:
         runtime.console.print(f"Sync failed: {exc}")
-        return
+        raise typer.Exit(1) from exc
 
     results: list[tuple[ProtonSyncTarget, SyncResult]] = []
     for target in targets:
@@ -224,7 +224,7 @@ def sync_command(
             result = adapter.sync(request, overrides=target.overrides)
         except AdapterError as exc:
             runtime.console.print(f"Sync failed for '{target.label}': {exc}")
-            return
+            raise typer.Exit(1) from exc
         results.append((target, result))
 
     if len(results) == 1:
@@ -238,3 +238,5 @@ def sync_command(
             runtime.console.print(f"[{target.label}] Warning: {warning}")
         for error in result.errors:
             runtime.console.print(f"[{target.label}] Error: {error}")
+    if any(result.errors for _, result in results):
+        raise typer.Exit(1)

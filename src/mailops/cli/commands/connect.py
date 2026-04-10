@@ -87,7 +87,7 @@ def connect_command(
         saved_profile = get_profile(runtime.config, profile)
         if saved_profile is None:
             runtime.console.print(f"Saved Proton profile '{profile}' was not found.")
-            return
+            raise typer.Exit(1)
         profile_overrides = profile_to_overrides(saved_profile)
 
     explicit_overrides = BridgeDiscoveryOverrides(
@@ -116,7 +116,7 @@ def connect_command(
     if save_profile_name is not None:
         if not endpoint.username:
             runtime.console.print("Unable to save Proton profile because the Bridge username is not resolved.")
-            return
+            raise typer.Exit(1)
         profile_record = ProtonAccountProfile(
             profile_name=save_profile_name,
             host=endpoint.host,
@@ -140,7 +140,7 @@ def connect_command(
         folders = adapter.list_folders(overrides=overrides)
     except AdapterError as exc:
         runtime.console.print(f"Unable to list folders: {exc}")
-        return
+        raise typer.Exit(1) from exc
 
     folder_table = Table(title="Proton Bridge Folders")
     folder_table.add_column("Folder")

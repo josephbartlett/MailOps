@@ -67,10 +67,13 @@ def ask_command(prompt: str = typer.Argument(..., help="Natural-language operato
 
     if plan.intent == "followup_analysis":
         refresh_thread_triage(runtime.config)
+        older_than_days = _older_than_days_from_prompt(prompt)
+        since_days = None if older_than_days is not None else _lookback_days_from_prompt(prompt)
         rows = list_triage_threads(
             runtime.config,
-            older_than_days=_older_than_days_from_prompt(prompt),
             account_id="all",
+            older_than_days=older_than_days,
+            since_days=since_days,
             states=("waiting_on_me",),
             limit=50,
         )
@@ -96,17 +99,22 @@ def ask_command(prompt: str = typer.Argument(..., help="Natural-language operato
         render_rule_proposal(runtime.console, proposal)
 
 
-def _older_than_days_from_prompt(prompt: str) -> int:
+def _older_than_days_from_prompt(prompt: str) -> int | None:
     lowered = prompt.lower()
     explicit = _OLDER_THAN_DAYS_RE.search(lowered)
     if explicit is not None:
         return int(explicit.group("count"))
+    return None
+
+
+def _lookback_days_from_prompt(prompt: str) -> int:
+    lowered = prompt.lower()
     if "this week" in lowered:
         return 7
     for token in lowered.split():
         if token.endswith("d") and token[:-1].isdigit():
             return int(token[:-1])
-    return 3
+    return 7
 
 
 def _filter_followup_rows(rows: list[dict[str, object]], prompt: str) -> list[dict[str, object]]:

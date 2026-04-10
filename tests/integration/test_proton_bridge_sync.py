@@ -180,6 +180,52 @@ def test_initial_sync_caps_to_recent_window(tmp_path) -> None:
     assert any("most recent 1 messages" in warning for warning in result.warnings)
 
 
+class FetchFailureImapClient(FakeImapClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.mailboxes["INBOX"][3] = {
+            "flags": [],
+            "internaldate": "Thu, 09 Apr 2026 12:00:00 +0000",
+            "raw": _build_message(
+                message_id="<message-3@example.com>",
+                subject="Follow-up after failed fetch",
+                sender="client@example.com",
+                recipient="ops@example.com",
+                body="This message should not move the cursor past the failed UID.",
+                date_header="Thu, 09 Apr 2026 11:58:00 +0000",
+            ),
+        }
+
+    def uid(self, command: str, *args: object) -> tuple[str, list[object]]:
+        if command == "FETCH" and int(args[0]) == 2:
+            return "NO", []
+        return super().uid(command, *args)
+
+
+def test_sync_does_not_advance_cursor_past_failed_fetch_uid(tmp_path) -> None:
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    adapter = ProtonBridgeAdapter(config, imap_client_factory=lambda endpoint: FetchFailureImapClient())
+
+    result = adapter.sync(
+        ImapSyncRequest(folders=["INBOX"], limit=25),
+        overrides=BridgeDiscoveryOverrides(
+            username="bridge-user",
+            password=SecretStr("bridge-pass"),
+            account_email="ops@example.com",
+        ),
+    )
+
+    assert result.messages_indexed == 2
+    assert result.errors == ["Failed to fetch UID 2 from 'INBOX'."]
+    assert any("not advanced past failed UID 2" in warning for warning in result.warnings)
+
+    with connect_db(config.db_path) as connection:
+        folder_row = connection.execute("SELECT last_uid FROM folders").fetchone()
+
+    assert folder_row is not None
+    assert int(folder_row["last_uid"]) == 1
+
+
 def test_alias_sync_can_share_one_canonical_account(tmp_path) -> None:
     config = AppConfig(home_dir=tmp_path / ".mailops")
     adapter = ProtonBridgeAdapter(config, imap_client_factory=lambda endpoint: FakeImapClient())

@@ -8,6 +8,7 @@ from mailops.adapters.proton_bridge.networking import (
     is_wsl_environment,
     probe_tcp_endpoint,
 )
+from mailops.adapters.proton_bridge.registry import list_profiles, profile_to_overrides
 from mailops.cli.runtime import build_runtime
 from mailops.index.db import get_table_counts, list_tables
 
@@ -35,18 +36,46 @@ def doctor_command() -> None:
     proton_endpoint = discover_bridge(runtime.config)
     bridge_hosts = bridge_host_candidates(proton_endpoint.host)
     table.add_row("proton_bridge_hosts", "info", ", ".join(bridge_hosts))
-    for host in bridge_hosts:
-        imap = probe_tcp_endpoint(host, proton_endpoint.imap_port)
-        smtp = probe_tcp_endpoint(host, proton_endpoint.smtp_port)
+    _add_bridge_probe_rows(
+        table,
+        label="default",
+        hosts=bridge_hosts,
+        imap_port=proton_endpoint.imap_port,
+        smtp_port=proton_endpoint.smtp_port,
+    )
+
+    profiles = list_profiles(runtime.config)
+    table.add_row("proton_profiles", "info", ", ".join(profile.profile_name for profile in profiles) or "(none)")
+    for profile in profiles:
+        endpoint = discover_bridge(runtime.config, overrides=profile_to_overrides(profile))
+        profile_hosts = bridge_host_candidates(endpoint.host)
         table.add_row(
-            f"proton_imap:{host}",
+            f"proton_profile:{profile.profile_name}",
+            "info",
+            f"hosts={', '.join(profile_hosts)} imap={endpoint.imap_port} smtp={endpoint.smtp_port}",
+        )
+        _add_bridge_probe_rows(
+            table,
+            label=profile.profile_name,
+            hosts=profile_hosts,
+            imap_port=endpoint.imap_port,
+            smtp_port=endpoint.smtp_port,
+        )
+
+    runtime.console.print(table)
+
+
+def _add_bridge_probe_rows(table: Table, *, label: str, hosts: list[str], imap_port: int, smtp_port: int) -> None:
+    for host in hosts:
+        imap = probe_tcp_endpoint(host, imap_port)
+        smtp = probe_tcp_endpoint(host, smtp_port)
+        table.add_row(
+            f"proton_imap:{label}:{host}:{imap_port}",
             "ok" if imap.reachable else "warn",
             "reachable" if imap.reachable else imap.error or "not reachable",
         )
         table.add_row(
-            f"proton_smtp:{host}",
+            f"proton_smtp:{label}:{host}:{smtp_port}",
             "ok" if smtp.reachable else "warn",
             "reachable" if smtp.reachable else smtp.error or "not reachable",
         )
-
-    runtime.console.print(table)

@@ -36,6 +36,8 @@ class CustomDraftBatchResult(BaseModel):
     draft_id: str
     account_id: str
     to_recipients: list[str]
+    cc_recipients: list[str] = Field(default_factory=list)
+    bcc_recipients: list[str] = Field(default_factory=list)
     subject: str
 
 
@@ -67,6 +69,8 @@ def create_custom_draft_review_batch(config: AppConfig, request: CustomDraftRequ
         scope = [
             f"account:{account['id']}",
             *[f"to:{recipient}" for recipient in to_recipients],
+            *[f"cc:{recipient}" for recipient in cc_recipients],
+            *[f"bcc:{recipient}" for recipient in bcc_recipients],
             *request.context_refs,
         ]
 
@@ -123,6 +127,8 @@ def create_custom_draft_review_batch(config: AppConfig, request: CustomDraftRequ
                 "draft_id": draft_id,
                 "account_id": str(account["id"]),
                 "to_recipients": to_recipients,
+                "cc_recipients": cc_recipients,
+                "bcc_recipients": bcc_recipients,
                 "context_refs": request.context_refs,
             },
         )
@@ -132,6 +138,8 @@ def create_custom_draft_review_batch(config: AppConfig, request: CustomDraftRequ
         draft_id=draft_id,
         account_id=str(account["id"]),
         to_recipients=to_recipients,
+        cc_recipients=cc_recipients,
+        bcc_recipients=bcc_recipients,
         subject=request.subject.strip(),
     )
 
