@@ -19,6 +19,8 @@ MailOps is designed to provide those capabilities without giving an LLM silent, 
 
 ## Current status
 
+Current release: **0.2.0**. See [release notes and upgrade instructions](docs/releases/v0.2.0.md).
+
 The repository now includes a working CLI, local SQLite bootstrap, Proton Bridge discovery, folder listing with capability detection, bounded recent-message sync, ranked thread triage, role-aware follow-up filtering, local draft proposal generation, custom outbound draft proposals, provider-backed Proton draft materialization, provider draft syncback snapshots, review batches, review-only Proton Sieve previews, a seeded local demo mailbox, and markdown audit export. Gmail remains intentionally unimplemented in this milestone.
 
 ## Product loop
@@ -127,6 +129,22 @@ The demo account uses provider `demo_local`, so it is useful for local search an
 MailOps includes reusable Codex Skills in `skills/`. The operator-facing skills let Codex use MailOps from any repository to search local email context, inspect a thread or message, draft email from the current repo/session context, and move approved draft batches through review/apply/audit. Contributor-facing skills cover MailOps product development, Proton validation, and public alpha release work.
 
 See [docs/codex-skills.md](docs/codex-skills.md) for installation and validation.
+
+## Development and reliability
+
+Run `python scripts/validate.py` after installing `.[dev]` in a virtual environment.
+It checks architecture, documentation links, lint, tests, CLI help, and a synthetic
+mailbox workflow in temporary state. See [the harness guide](docs/harness-engineering.md)
+and [quality and audit findings](docs/quality.md) for checks and known limitations.
+
+Set an explicit absolute `MAILOPS_HOME` when using MailOps from another repository;
+the default `.mailops` is relative to the current directory. Use a separate temporary
+home for demos and development, away from operational mail.
+
+Replies now retain the recipient envelope shown for review. Legacy proposals that
+lack recipients must be recreated and reviewed. If draft creation is interrupted,
+MailOps blocks automatic retries and rollback because a Proton draft may already
+exist. Inspect Proton Drafts and the batch's audit history before recovery.
 
 ## Rule Preview Workflow
 

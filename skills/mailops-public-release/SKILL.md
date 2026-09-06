@@ -1,15 +1,15 @@
 ---
 name: mailops-public-release
-description: Prepare or verify MailOps public alpha releases, including versioning, packaging, PyPI artifacts, docs, release checklist, security review, demo workflow, and source-control readiness. Use before tagging, pushing, or publishing MailOps v0.1.x.
+description: Prepare or verify MailOps releases, including versioning, packaging, PyPI artifacts, docs, release checks, and source-control readiness. Use before tagging, pushing, or publishing MailOps.
 ---
 
 # MailOps Public Release
 
-Use this skill for public alpha release preparation and final release review.
+Use this skill for release preparation and final release review. Read the current repository's `docs/release-process.md` and `docs/release-checklist.md`; they define the maintained procedure.
 
 ## Release Boundary
 
-MailOps v0.1.x proves the Proton operator loop:
+MailOps releases preserve the operator loop:
 
 ```text
 sync -> inspect -> triage -> draft -> review -> apply -> audit
@@ -28,29 +28,37 @@ Do not commit, push, tag, publish, or change remotes unless the operator explici
 6. Confirm `.env.example` and `examples/config.example.toml` contain no secrets.
 7. Confirm release notes state that send, delete, bulk mutation, and provider rule application are not implemented.
 8. Confirm `docs/release-process.md` documents SemVer, changelog, GitHub Release, PyPI, and visibility rules.
-9. Confirm the GitHub Release has a clear title and markdown body, preferably from `docs/releases/<version>.md`.
+9. Prepare a clear GitHub Release title and markdown body for the selected version, preferably in `docs/releases/<version>.md`. Preparation does not require publishing a release.
 
 ## Validation
 
 Run:
 
 ```bash
-python -m pytest
-PYTHONPATH=src python -m mailops.cli.main --help
-PYTHONPATH=src python -m mailops.cli.main doctor
-PYTHONPATH=src python -m mailops.cli.main status
+python scripts/validate.py
 ```
 
-Validate the local-only demo path in a temporary MailOps home:
+Validate the local-only demo path in a unique temporary MailOps home, restoring any existing environment value even on failure. Use the source tree (`$env:PYTHONPATH = "src"` on PowerShell):
 
 ```powershell
-$env:MAILOPS_HOME = "$env:TEMP\mailops-demo-validation"
-py -m mailops.cli.main demo seed
-py -m mailops.cli.main status
-py -m mailops.cli.main search invoice
-py -m mailops.cli.main triage --since 0d
-Remove-Item Env:MAILOPS_HOME
+$previousMailopsHome = [Environment]::GetEnvironmentVariable("MAILOPS_HOME", "Process")
+$demoHome = Join-Path ([IO.Path]::GetTempPath()) ("mailops-demo-" + [guid]::NewGuid())
+try {
+  $env:MAILOPS_HOME = $demoHome
+  py -m mailops.cli.main demo seed
+  if ($LASTEXITCODE) { throw "Demo seed failed" }
+  py -m mailops.cli.main status
+  if ($LASTEXITCODE) { throw "Status failed" }
+  py -m mailops.cli.main search invoice
+  if ($LASTEXITCODE) { throw "Search failed" }
+  py -m mailops.cli.main triage --since 0d
+  if ($LASTEXITCODE) { throw "Triage failed" }
+} finally {
+  [Environment]::SetEnvironmentVariable("MAILOPS_HOME", $previousMailopsHome, "Process")
+}
 ```
+
+`doctor` probes configured Bridge endpoints. Live provider checks are separate from local release validation and should run only when that access is authorized.
 
 ## Package Build
 
@@ -65,19 +73,10 @@ If `build` or `twine` are missing, install them deliberately and note any depend
 
 Search release-relevant files for temporary Bridge passwords, old versions, and placeholder persisted passwords. Do not print real secrets back to the user.
 
-Examples:
-
-```powershell
-Select-String -Path pyproject.toml,src/**/*.py,README.md,docs/**/*.md,examples/**/*,.env.example -SimpleMatch "0.1.0a0"
-Select-String -Path examples/config.example.toml -Pattern 'password\\s*=\\s*".+"'
-```
+Inspect the actual wheel and source archive file lists as well as tracked source. Confirm private mailbox state, credentials and temporary files are excluded. Report secret findings by file and category without copying the secret. A single password regex is not evidence of a clean release.
 
 ## Publish Handoff
 
-After the user provides the remote origin:
+Use the repository's existing remote and current release state. Do not initialize Git, reconnect a repository, change remotes, or reuse an old version tag as routine preparation. Complete the changelog, version changes, release notes and artifact validation before requesting any missing permission for the exact publishing action. Honor approval already given for unchanged scope.
 
-1. Initialize or reconnect Git.
-2. Add the remote.
-3. Update project URLs.
-4. Re-run validation and package checks.
-5. Commit, tag `v0.1.0`, push, and publish only after final review.
+When publication is explicitly authorized, use an annotated SemVer tag matching the selected version and create a GitHub Release with a clear title and markdown description as required by `docs/release-process.md`. Do not infer PyPI publication or a visibility change from approval to push a commit or tag.

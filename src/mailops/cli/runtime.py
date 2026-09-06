@@ -10,6 +10,7 @@ from rich.console import Console
 from mailops.core.config import AppConfig
 from mailops.core.logging import configure_logging
 from mailops.index.db import initialize_database
+from mailops.utils.text import LiteralConsole
 
 
 @dataclass(slots=True)
@@ -28,5 +29,4 @@ def build_runtime() -> Runtime:
     config.ensure_directories()
     logger = configure_logging(config)
     initialize_database(config)
-    return Runtime(config=config, console=Console(), logger=logger)
-
+    return Runtime(config=config, console=LiteralConsole(markup=False, emoji=False, highlight=False), logger=logger)

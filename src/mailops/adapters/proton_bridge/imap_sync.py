@@ -39,7 +39,7 @@ class ImapFolder(BaseModel):
 class ImapSyncRequest(BaseModel):
     account_id: str | None = None
     folders: list[str] = Field(default_factory=list)
-    limit: int = 250
+    limit: int = Field(default=250, ge=1)
 
 
 class NormalizedImapMessage(BaseModel):
@@ -209,7 +209,7 @@ def normalize_imap_message(
     cc_recipients = _extract_addresses(parsed.get_all("Cc", []))
     bcc_recipients = _extract_addresses(parsed.get_all("Bcc", []))
     participants = sorted({item for item in [sender, *to_recipients, *cc_recipients, *bcc_recipients] if item})
-    provider_message_id = _canonical_message_id(parsed.get("Message-ID")) or f"uid:{account_id}:{uid}"
+    provider_message_id = _canonical_message_id(parsed.get("Message-ID")) or f"content-sha256:{hashlib.sha256(raw_message).hexdigest()}"
     provider_thread_id = _build_provider_thread_id(parsed, subject, provider_message_id)
 
     sent_at = _parse_header_datetime(parsed.get("Date"))
@@ -285,7 +285,10 @@ def _build_provider_thread_id(parsed: Message, subject: str, provider_message_id
 def _parse_header_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    parsed = parsedate_to_datetime(value)
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed

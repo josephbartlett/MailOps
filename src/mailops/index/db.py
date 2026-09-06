@@ -34,6 +34,7 @@ SCHEMA_STATEMENTS = (
         is_selectable INTEGER NOT NULL DEFAULT 1,
         can_sync INTEGER NOT NULL DEFAULT 1,
         can_create_draft INTEGER NOT NULL DEFAULT 0,
+        uid_validity TEXT,
         last_uid INTEGER NOT NULL DEFAULT 0,
         last_sync_at TEXT,
         UNIQUE(account_id, provider_folder_id)
@@ -65,6 +66,7 @@ SCHEMA_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
         thread_id TEXT NOT NULL,
         provider_message_id TEXT NOT NULL,
         sender TEXT NOT NULL,
@@ -77,7 +79,7 @@ SCHEMA_STATEMENTS = (
         body_text TEXT NOT NULL DEFAULT '',
         folder_or_label_refs TEXT NOT NULL DEFAULT '[]',
         flags TEXT NOT NULL DEFAULT '[]',
-        UNIQUE(provider_message_id)
+        UNIQUE(account_id, provider_message_id)
     )
     """,
     """
@@ -191,6 +193,7 @@ MIGRATION_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("adapter_config_ref", "TEXT"),
     ),
     "folders": (
+        ("uid_validity", "TEXT"),
         ("role", "TEXT NOT NULL DEFAULT 'unknown'"),
         ("is_selectable", "INTEGER NOT NULL DEFAULT 1"),
         ("can_sync", "INTEGER NOT NULL DEFAULT 1"),
@@ -224,6 +227,7 @@ MIGRATION_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("after_state", "TEXT"),
     ),
     "messages": (
+        ("account_id", "TEXT"),
         ("to_recipients", "TEXT NOT NULL DEFAULT '[]'"),
         ("cc_recipients", "TEXT NOT NULL DEFAULT '[]'"),
         ("bcc_recipients", "TEXT NOT NULL DEFAULT '[]'"),
@@ -235,17 +239,29 @@ MIGRATION_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
 MIGRATION_INDEXES: tuple[str, ...] = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_folders_account_provider_folder ON folders(account_id, provider_folder_id)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_account_provider_thread ON threads(account_id, provider_thread_id)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_provider_message_id ON messages(provider_message_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_account_provider_message ON messages(account_id, provider_message_id)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id)",
+    "CREATE INDEX IF NOT EXISTS idx_folder_messages_message_id ON folder_messages(message_id)",
     "CREATE INDEX IF NOT EXISTS idx_action_proposals_batch_id ON action_proposals(batch_id)",
     "CREATE INDEX IF NOT EXISTS idx_draft_proposals_thread_id ON draft_proposals(thread_id)",
     "CREATE INDEX IF NOT EXISTS idx_provider_drafts_batch_id ON provider_drafts(batch_id)",
 )
 
 
+class _ClosingConnection(sqlite3.Connection):
+    """Commit or roll back a transaction and release its file handle on exit."""
+
+    def __exit__(self, *args: Any) -> bool:
+        try:
+            return super().__exit__(*args)
+        finally:
+            self.close()
+
+
 def connect_db(path: Path) -> sqlite3.Connection:
     """Open a SQLite connection with row access by name."""
 
-    connection = sqlite3.connect(path)
+    connection = sqlite3.connect(path, factory=_ClosingConnection)
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -255,6 +271,7 @@ def initialize_database(config: AppConfig) -> None:
 
     config.ensure_directories()
     with connect_db(config.db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
         _apply_migrations(connection)
@@ -284,6 +301,7 @@ def _apply_migrations(connection: sqlite3.Connection) -> None:
             except sqlite3.OperationalError as exc:
                 if "duplicate column name" not in str(exc).lower():
                     raise
+    _migrate_message_identity(connection)
     for statement in MIGRATION_INDEXES:
         connection.execute(statement)
     connection.execute(
@@ -312,6 +330,43 @@ def _apply_migrations(connection: sqlite3.Connection) -> None:
                 """,
                 (email_address, account_id or email_address, None, 1 if email_address == account_id else 0),
             )
+
+
+def _migrate_message_identity(connection: sqlite3.Connection) -> None:
+    """Preserve local IDs while replacing the legacy cross-account uniqueness rule."""
+
+    columns = connection.execute("PRAGMA table_info(messages)").fetchall()
+    needs_rebuild = any(row["name"] == "account_id" and not row["notnull"] for row in columns)
+    if not needs_rebuild:
+        return
+    connection.execute(
+        """
+        UPDATE messages SET account_id = (
+            SELECT account_id FROM threads WHERE threads.id = messages.thread_id
+        ) WHERE account_id IS NULL
+        """
+    )
+    if connection.execute("SELECT 1 FROM messages WHERE account_id IS NULL LIMIT 1").fetchone():
+        raise sqlite3.IntegrityError("Message identity migration requires every message to have an existing account thread.")
+
+    schema = next(statement for statement in SCHEMA_STATEMENTS if "CREATE TABLE IF NOT EXISTS messages (" in statement)
+    connection.execute(schema.replace("CREATE TABLE IF NOT EXISTS messages (", "CREATE TABLE messages_account_scoped ("))
+    new_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(messages_account_scoped)")}
+    if {str(row["name"]) for row in columns} != new_columns:
+        raise sqlite3.IntegrityError("Message identity migration found an unsupported schema; no records were changed.")
+    dependent_schema_sql = [
+        str(row["sql"])
+        for row in connection.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type IN ('index', 'trigger') AND tbl_name = 'messages'"
+        )
+        if row["sql"] and row["name"] != "idx_messages_provider_message_id"
+    ]
+    names = ", ".join('"' + str(row["name"]).replace('"', '""') + '"' for row in columns)
+    connection.execute(f"INSERT INTO messages_account_scoped ({names}) SELECT {names} FROM messages")
+    connection.execute("DROP TABLE messages")
+    connection.execute("ALTER TABLE messages_account_scoped RENAME TO messages")
+    for statement in dependent_schema_sql:
+        connection.execute(statement)
 
 
 def list_tables(config: AppConfig) -> list[str]:
@@ -407,14 +462,16 @@ def upsert_folder(
     is_selectable: bool = True,
     can_sync: bool = True,
     can_create_draft: bool = False,
+    uid_validity: str | None = None,
     last_uid: int | None = None,
     last_sync_at: str | None = None,
 ) -> None:
     """Insert or update a folder record without resetting cursor state unintentionally."""
 
-    current = connection.execute("SELECT last_uid, last_sync_at FROM folders WHERE id = ?", (folder_id,)).fetchone()
+    current = connection.execute("SELECT last_uid, last_sync_at, uid_validity FROM folders WHERE id = ?", (folder_id,)).fetchone()
     effective_last_uid = current["last_uid"] if current is not None and last_uid is None else (last_uid or 0)
     effective_last_sync_at = current["last_sync_at"] if current is not None and last_sync_at is None else last_sync_at
+    effective_uid_validity = current["uid_validity"] if current is not None and uid_validity is None else uid_validity
 
     connection.execute(
         """
@@ -429,9 +486,10 @@ def upsert_folder(
             is_selectable,
             can_sync,
             can_create_draft,
+            uid_validity,
             last_uid,
             last_sync_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             account_id = excluded.account_id,
             provider_folder_id = excluded.provider_folder_id,
@@ -442,6 +500,7 @@ def upsert_folder(
             is_selectable = excluded.is_selectable,
             can_sync = excluded.can_sync,
             can_create_draft = excluded.can_create_draft,
+            uid_validity = excluded.uid_validity,
             last_uid = excluded.last_uid,
             last_sync_at = excluded.last_sync_at
         """,
@@ -456,6 +515,7 @@ def upsert_folder(
             1 if is_selectable else 0,
             1 if can_sync else 0,
             1 if can_create_draft else 0,
+            effective_uid_validity,
             effective_last_uid,
             effective_last_sync_at,
         ),
@@ -469,6 +529,18 @@ def get_folder_last_uid(connection: sqlite3.Connection, folder_id: str) -> int:
     if row is None:
         return 0
     return int(row["last_uid"])
+
+
+def get_folder_uid_validity(connection: sqlite3.Connection, folder_id: str) -> str | None:
+    row = connection.execute("SELECT uid_validity FROM folders WHERE id = ?", (folder_id,)).fetchone()
+    return str(row["uid_validity"]) if row is not None and row["uid_validity"] is not None else None
+
+
+def reset_folder_uid_state(connection: sqlite3.Connection, folder_id: str, uid_validity: str) -> None:
+    """Discard invalid UID links while retaining indexed message history."""
+
+    connection.execute("DELETE FROM folder_messages WHERE folder_id = ?", (folder_id,))
+    connection.execute("UPDATE folders SET last_uid = 0, uid_validity = ? WHERE id = ?", (uid_validity, folder_id))
 
 
 def upsert_thread(
@@ -546,17 +618,24 @@ def upsert_message(
 ) -> bool:
     """Insert or update a message record and report whether it was new."""
 
+    thread = connection.execute("SELECT account_id FROM threads WHERE id = ?", (thread_id,)).fetchone()
+    if thread is None:
+        raise ValueError("A message must belong to an existing account thread.")
+    account_id = str(thread["account_id"])
     existing = connection.execute(
-        "SELECT id FROM messages WHERE provider_message_id = ?",
-        (provider_message_id,),
+        "SELECT id, folder_or_label_refs FROM messages WHERE account_id = ? AND provider_message_id = ?",
+        (account_id, provider_message_id),
     ).fetchone()
     inserted = existing is None
     effective_message_id = message_id if inserted else str(existing["id"])
+    if existing is not None:
+        folder_or_label_refs = sorted(set(json.loads(existing["folder_or_label_refs"])) | set(folder_or_label_refs))
 
     connection.execute(
         """
         INSERT INTO messages (
             id,
+            account_id,
             thread_id,
             provider_message_id,
             sender,
@@ -569,8 +648,8 @@ def upsert_message(
             body_text,
             folder_or_label_refs,
             flags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(provider_message_id) DO UPDATE SET
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(account_id, provider_message_id) DO UPDATE SET
             thread_id = excluded.thread_id,
             sender = excluded.sender,
             to_recipients = excluded.to_recipients,
@@ -585,6 +664,7 @@ def upsert_message(
         """,
         (
             effective_message_id,
+            account_id,
             thread_id,
             provider_message_id,
             _normalize_address(sender),
@@ -613,8 +693,10 @@ def link_message_to_folder(
     """Link a normalized message into a provider folder by UID."""
 
     row = connection.execute(
-        "SELECT id FROM messages WHERE provider_message_id = ?",
-        (provider_message_id,),
+        """SELECT messages.id FROM messages
+        JOIN folders ON folders.account_id = messages.account_id
+        WHERE folders.id = ? AND messages.provider_message_id = ?""",
+        (folder_id, provider_message_id),
     ).fetchone()
     if row is None:
         raise ValueError(f"message '{provider_message_id}' must exist before it can be linked to a folder")
@@ -653,7 +735,7 @@ def get_pending_action_proposal_count(config: AppConfig) -> int:
             SELECT COUNT(*) AS count
             FROM action_proposals
             WHERE review_status = 'pending'
-               OR execution_status = 'pending'
+               OR (review_status != 'rejected' AND execution_status IN ('pending', 'executing', 'uncertain', 'failed', 'blocked'))
             """
         ).fetchone()
     return int(row["count"])

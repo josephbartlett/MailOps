@@ -72,8 +72,8 @@ def generate_sieve_rule_proposal(prompt: str) -> SieveRuleProposal:
             f"{readable_conditions} and files them into {_quote(target_mailbox)}."
         ),
         preview=(
-            f"Would affect future matching Proton messages only. MailOps does not apply this rule; "
-            f"copy it into Proton after manual review if it is correct."
+            "Would affect future matching Proton messages only. MailOps does not apply this rule; "
+            "copy it into Proton after manual review if it is correct."
         ),
     )
 

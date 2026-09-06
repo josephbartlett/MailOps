@@ -10,54 +10,59 @@ Use this skill for live or simulated Proton Bridge validation. Never persist Bri
 ## Safety Rules
 
 - Use the Proton Bridge-generated IMAP password, not the Proton account password.
-- Set credentials only as a runtime environment variable or transient `--password`.
+- Set credentials through a secure prompt and a runtime environment variable. Avoid literal passwords and `--password` arguments: command history and process listings can expose them.
 - Do not write credentials into `.env`, TOML config, docs, logs, shell scripts, or shell history.
 - Do not send mail, delete mail, bulk archive, bulk move, or apply provider rules.
-- Apply only reviewed `create_draft` actions whose exact scope was inspected.
+- Apply only `create_draft` actions after the user has approved the exact account, recipients, subject, body and batch scope. A request for an audit or connection test does not authorize creating provider drafts.
 
 ## Baseline
 
-From the MailOps repo:
+Read the repo's `docs/windows-powershell-handoff.md` for Windows setup; treat its machine snapshots and profile names as historical examples. Resolve the intended existing absolute `MAILOPS_HOME` before live checks so a different working directory does not select a different mailbox store.
+
+For local-only code validation, use an isolated temporary home and the repository's tests. For an authorized live connection diagnostic, run from the MailOps repo:
 
 ```powershell
 $env:PYTHONPATH = "src"
-py -m pytest
 py -m mailops.cli.main doctor
 py -m mailops.cli.main status
 py -m mailops.cli.main review batch list
 ```
 
-On Windows, `doctor` should report Proton IMAP `127.0.0.1:1143` and SMTP `127.0.0.1:1025` reachable when Bridge is running. In WSL, inspect `docs/wsl-windows-bridge.md` and prefer Windows PowerShell for live write-path validation if WSL cannot reach Bridge.
+`doctor` actively probes configured TCP endpoints. Windows defaults are IMAP `127.0.0.1:1143` and SMTP `127.0.0.1:1025`; verify the actual profile instead of assuming defaults. SMTP reachability does not imply a MailOps send capability. In WSL, inspect `docs/wsl-windows-bridge.md` and prefer Windows PowerShell if WSL cannot reach Bridge.
 
 ## Runtime Password Pattern
 
-Use a prompt instead of a literal command:
+Use a prompt instead of a literal command, restore any existing runtime value afterward, and run only the authorized commands inside the outer `try`:
 
 ```powershell
+$previousPassword = [Environment]::GetEnvironmentVariable("MAILOPS_PROTON_PASSWORD", "Process")
 $secure = Read-Host "Proton Bridge password" -AsSecureString
 $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
-  $env:MAILOPS_PROTON_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+  try {
+    $env:MAILOPS_PROTON_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    $secure.Dispose()
+  }
+  # Run the authorized MailOps commands here.
 } finally {
-  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+  [Environment]::SetEnvironmentVariable("MAILOPS_PROTON_PASSWORD", $previousPassword, "Process")
+  $previousPassword = $null
 }
-```
-
-Clear it when done:
-
-```powershell
-Remove-Item Env:MAILOPS_PROTON_PASSWORD
 ```
 
 ## Read Path
 
 ```powershell
 py -m mailops.cli.main connect proton --list-profiles
-py -m mailops.cli.main connect proton --profile lm-main --list-folders
-py -m mailops.cli.main sync --profile lm-main --folder INBOX --limit 10
+py -m mailops.cli.main connect proton --profile <profile_name> --list-folders
+py -m mailops.cli.main sync --profile <profile_name> --folder INBOX --limit 10
 py -m mailops.cli.main status
-py -m mailops.cli.main triage --since 3d
+py -m mailops.cli.main triage --since 3d --account <account_id>
 ```
+
+Choose the profile and account from the intended mailbox. Omitting the sync target can select every saved profile. Keep the folder and count bounded to the requested validation.
 
 ## Write Path
 
@@ -74,7 +79,7 @@ py -m mailops.cli.main triage --since 3d
    py -m mailops.cli.main review batch show <batch_id>
    ```
 
-3. Apply only if every action is a safe `create_draft` action:
+3. Once the user has approved the exact displayed batch and every action is `create_draft`, apply it:
 
    ```powershell
    py -m mailops.cli.main apply <batch_id>
@@ -88,4 +93,4 @@ py -m mailops.cli.main triage --since 3d
    py -m mailops.cli.main export audit --format markdown
    ```
 
-Expected result: provider refs such as `Drafts:uid:<n>`, provider draft snapshots with status `present`, no sent mail, and audit events for approval, materialization, syncback, and execution.
+Expected result: provider refs such as `Drafts:uid:<n>`, provider draft snapshots with status `present`, and audit events for approval, materialization, syncback, and execution. Report that this workflow invoked no send operation; draft presence alone does not establish account-wide absence of sent mail. If append completion is uncertain, inspect execution state and reconcile before any retry rather than creating another batch.

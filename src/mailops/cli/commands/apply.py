@@ -54,7 +54,13 @@ def apply_command(
         runtime.console.print(f"Batch '{batch_id}' was already rolled back and cannot be applied.")
         raise typer.Exit(1)
 
-    if result.executed_actions:
+    if result.uncertain_actions:
+        runtime.console.print(
+            f"Batch '{batch_id}' needs attention for {result.uncertain_actions} action(s). "
+            "A provider draft may already exist. Inspect Proton Drafts before recovery; "
+            "automatic retry and local rollback are blocked."
+        )
+    elif result.executed_actions:
         runtime.console.print(
             f"Applied batch '{batch_id}'. Materialized {result.executed_actions} provider draft(s); batch status is '{result.batch_status}'."
         )
@@ -70,5 +76,5 @@ def apply_command(
         )
     for error in result.errors:
         runtime.console.print(f"Execution note: {error}")
-    if result.failed_actions:
+    if result.failed_actions or result.uncertain_actions:
         raise typer.Exit(1)

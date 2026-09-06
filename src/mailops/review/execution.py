@@ -10,10 +10,10 @@ from pydantic import BaseModel, Field
 
 from mailops.adapters.proton_bridge.adapter import ProtonBridgeAdapter
 from mailops.adapters.proton_bridge.bridge_discovery import BridgeDiscoveryOverrides
-from mailops.adapters.proton_bridge.drafts import DraftCreateRequest
+from mailops.adapters.proton_bridge.drafts import DraftCreateRequest, build_draft_message
 from mailops.core.config import AppConfig
 from mailops.core.exceptions import AdapterError
-from mailops.core.models import ExecutionStatus
+from mailops.core.models import ExecutionStatus, ReviewStatus
 from mailops.index.db import (
     connect_db,
     create_audit_event,
@@ -32,6 +32,7 @@ class BatchExecutionResult(BaseModel):
     executed_actions: int = 0
     pending_actions: int = 0
     failed_actions: int = 0
+    uncertain_actions: int = 0
     errors: list[str] = Field(default_factory=list)
 
 
@@ -51,7 +52,7 @@ def execute_review_batch(
         return None
     if approved.highest_risk.value == "high":
         return BatchExecutionResult(batch_id=batch_id, batch_status=approved.status, pending_actions=len(approved.actions))
-    if approved.status == "rolled_back":
+    if approved.status not in {"approved", "executed", "partially_executed", "attention_required"}:
         return BatchExecutionResult(batch_id=batch_id, batch_status=approved.status, pending_actions=len(approved.actions))
 
     executable_actions = [action for action in approved.actions if action.type == "create_draft" and action.draft_proposal_id]
@@ -59,12 +60,17 @@ def execute_review_batch(
         return BatchExecutionResult(batch_id=batch_id, batch_status=approved.status)
 
     executed_actions = 0
-    failed_actions = 0
     errors: list[str] = []
     with connect_db(config.db_path) as connection:
         for action in executable_actions:
+            if action.execution_status in {ExecutionStatus.EXECUTING, ExecutionStatus.UNCERTAIN}:
+                errors.append(f"Action '{action.id}' may already have created a provider draft; inspect Proton Drafts before recovery. Automatic retry is blocked.")
+                continue
+            if action.review_status != ReviewStatus.APPROVED:
+                continue
             if action.execution_status not in {ExecutionStatus.PENDING, ExecutionStatus.FAILED}:
                 continue
+            provider_attempted = False
             target_row = connection.execute(
                 """
                 SELECT
@@ -82,9 +88,7 @@ def execute_review_batch(
                     COALESCE(NULLIF(draft_proposals.account_id, ''), threads.account_id) AS account_id,
                     accounts.provider AS provider,
                     accounts.email_address AS account_email,
-                    accounts.adapter_config_ref AS adapter_config_ref,
-                    messages.sender AS latest_sender,
-                    messages.provider_message_id AS latest_provider_message_id
+                    accounts.adapter_config_ref AS adapter_config_ref
                 FROM action_proposals
                 JOIN draft_proposals
                   ON draft_proposals.id = action_proposals.draft_proposal_id
@@ -92,27 +96,22 @@ def execute_review_batch(
                   ON threads.id = draft_proposals.thread_id
                 JOIN accounts
                   ON accounts.id = COALESCE(NULLIF(draft_proposals.account_id, ''), threads.account_id)
-                LEFT JOIN messages
-                  ON messages.id = (
-                      SELECT candidate.id
-                      FROM messages AS candidate
-                      WHERE candidate.thread_id = threads.id
-                      ORDER BY COALESCE(candidate.received_at, candidate.sent_at, '') DESC
-                      LIMIT 1
-                  )
                 WHERE action_proposals.id = ?
                 """,
                 (action.id,),
             ).fetchone()
             if target_row is None:
-                failed_actions += 1
                 error_message = f"Action '{action.id}' is missing its draft execution context."
+                changed = connection.execute(
+                    """UPDATE action_proposals SET execution_status = 'failed'
+                       WHERE id = ? AND review_status = 'approved'
+                         AND execution_status IN ('pending', 'failed') AND provider_ref IS NULL""",
+                    (action.id,),
+                ).rowcount
+                if not changed:
+                    connection.commit()
+                    continue
                 errors.append(error_message)
-                update_action_proposal_execution(
-                    connection,
-                    proposal_id=action.id,
-                    execution_status=ExecutionStatus.FAILED.value,
-                )
                 create_audit_event(
                     connection,
                     event_id=new_identifier("audit"),
@@ -124,6 +123,7 @@ def execute_review_batch(
                     before_state={"execution_status": action.execution_status.value},
                     after_state={"execution_status": ExecutionStatus.FAILED.value, "error": error_message},
                 )
+                connection.commit()
                 continue
 
             try:
@@ -143,13 +143,21 @@ def execute_review_batch(
                     if message_id
                 ]
                 if not to_recipients:
-                    latest_sender = str(target_row["latest_sender"] or "").strip().lower()
-                    if not latest_sender or latest_sender == account_email:
-                        raise AdapterError(f"Thread '{target_row['thread_id']}' has no external recipient to draft against.")
-                    to_recipients = [latest_sender]
-                    in_reply_to = in_reply_to or _canonical_message_id(target_row["latest_provider_message_id"])
-                    if not reference_message_ids and in_reply_to:
-                        reference_message_ids = [in_reply_to]
+                    raise AdapterError("Draft has no reviewed recipient envelope. Recreate this legacy proposal and review its recipients before applying.")
+
+                request = DraftCreateRequest(
+                    account_id=account_id,
+                    from_address=account_email,
+                    to_recipients=to_recipients,
+                    cc_recipients=cc_recipients,
+                    bcc_recipients=bcc_recipients,
+                    subject=str(target_row["proposed_subject"]),
+                    body_text=str(target_row["proposed_body"]),
+                    in_reply_to=in_reply_to,
+                    references=reference_message_ids,
+                )
+                # Reject invalid headers before recording any provider attempt.
+                build_draft_message(request)
 
                 adapter = (
                     proton_adapter_factory(config)
@@ -169,20 +177,34 @@ def execute_review_batch(
                         f"Action '{action.id}': Proton Bridge credentials are not currently available for account '{account_id}'."
                     )
                     continue
-                result = adapter.create_draft(
-                    DraftCreateRequest(
-                        account_id=account_id,
-                        from_address=account_email,
-                        to_recipients=to_recipients,
-                        cc_recipients=cc_recipients,
-                        bcc_recipients=bcc_recipients,
-                        subject=str(target_row["proposed_subject"]),
-                        body_text=str(target_row["proposed_body"]),
-                        in_reply_to=in_reply_to,
-                        references=reference_message_ids,
-                    ),
-                    overrides=resolved_overrides,
+                claimed = connection.execute(
+                    """UPDATE action_proposals SET execution_status = 'executing'
+                       WHERE id = ? AND batch_id = ? AND review_status = 'approved'
+                         AND execution_status IN ('pending', 'failed') AND provider_ref IS NULL
+                         AND EXISTS (SELECT 1 FROM review_batches WHERE id = ?
+                             AND status IN ('approved', 'executed', 'partially_executed', 'attention_required'))""",
+                    (action.id, batch_id, batch_id),
+                ).rowcount
+                if not claimed:
+                    connection.commit()
+                    continue
+                connection.execute(
+                    "UPDATE review_batches SET rollback_available = 0 WHERE id = ?", (batch_id,)
                 )
+                create_audit_event(
+                    connection,
+                    event_id=new_identifier("audit"),
+                    actor=actor,
+                    action_type="draft_materialization_started",
+                    target_ref=action.id,
+                    timestamp=_utc_now(),
+                    result="executing",
+                    after_state={"execution_status": "executing"},
+                )
+                # Persist the claim before APPEND. A crash cannot make a retry append twice.
+                connection.commit()
+                provider_attempted = True
+                result = adapter.create_draft(request, overrides=resolved_overrides)
                 update_action_proposal_execution(
                     connection,
                     proposal_id=action.id,
@@ -204,16 +226,29 @@ def execute_review_batch(
                         "mailbox": result.mailbox,
                     },
                 )
+                connection.commit()
                 executed_actions += 1
-            except AdapterError as exc:
-                failed_actions += 1
-                error_message = str(exc)
+            except Exception as exc:
+                # Keep the durable claim, but discard any incomplete receipt/audit transaction.
+                connection.rollback()
+                next_execution_status = ExecutionStatus.UNCERTAIN if provider_attempted else ExecutionStatus.FAILED
+                if provider_attempted:
+                    error_message = "Provider draft creation did not complete with a reliable local receipt. Inspect Proton Drafts before recovery; automatic retry is blocked."
+                elif isinstance(exc, AdapterError):
+                    error_message = str(exc)
+                else:
+                    error_message = f"Draft preparation failed ({type(exc).__name__}). Check the reviewed envelope and local configuration."
                 errors.append(f"Action '{action.id}': {error_message}")
-                update_action_proposal_execution(
-                    connection,
-                    proposal_id=action.id,
-                    execution_status=ExecutionStatus.FAILED.value,
-                )
+                changed = connection.execute(
+                    """UPDATE action_proposals SET execution_status = ? WHERE id = ?
+                       AND execution_status IN (?, ?) AND provider_ref IS NULL""",
+                    (next_execution_status.value, action.id,
+                     "executing" if provider_attempted else "pending",
+                     "executing" if provider_attempted else "failed"),
+                ).rowcount
+                if not changed:
+                    connection.commit()
+                    continue
                 create_audit_event(
                     connection,
                     event_id=new_identifier("audit"),
@@ -221,11 +256,13 @@ def execute_review_batch(
                     action_type="draft_materialization_failed",
                     target_ref=action.id,
                     timestamp=_utc_now(),
-                    result="failed",
+                    result=next_execution_status.value,
                     before_state={"execution_status": action.execution_status.value},
-                    after_state={"execution_status": ExecutionStatus.FAILED.value, "error": error_message},
+                    after_state={"execution_status": next_execution_status.value, "error": error_message},
                 )
+                connection.commit()
 
+        connection.execute("BEGIN IMMEDIATE")
         refreshed_actions = connection.execute(
             """
             SELECT execution_status
@@ -248,9 +285,17 @@ def execute_review_batch(
             executed_count = sum(
                 1 for row in refreshed_actions if str(row["execution_status"]) == ExecutionStatus.EXECUTED.value
             )
+            uncertain_count = sum(
+                1 for row in refreshed_actions if str(row["execution_status"]) in {"executing", "uncertain"}
+            )
+            blocked_count = sum(1 for row in refreshed_actions if str(row["execution_status"]) == "blocked")
             current_status = str(refreshed_batch["status"])
             next_status = current_status
-            if executed_count and pending_actions == 0 and failed_count == 0:
+            if current_status == "rolled_back":
+                pass
+            elif uncertain_count or blocked_count:
+                next_status = "attention_required"
+            elif executed_count and pending_actions == 0 and failed_count == 0:
                 next_status = "executed"
             elif executed_count and (pending_actions > 0 or failed_count > 0):
                 next_status = "partially_executed"
@@ -277,6 +322,7 @@ def execute_review_batch(
         executed_actions=executed_actions,
         pending_actions=sum(1 for action in final_batch.actions if action.execution_status == ExecutionStatus.PENDING),
         failed_actions=sum(1 for action in final_batch.actions if action.execution_status == ExecutionStatus.FAILED),
+        uncertain_actions=sum(1 for action in final_batch.actions if action.execution_status in {ExecutionStatus.EXECUTING, ExecutionStatus.UNCERTAIN}),
         errors=errors,
     )
 
@@ -295,11 +341,11 @@ def _json_list(raw_value: object) -> list[str]:
         return []
     try:
         value = json.loads(str(raw_value))
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value]
+    except json.JSONDecodeError as exc:
+        raise ValueError("Draft envelope contains invalid JSON.") from exc
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError("Draft envelope must contain lists of strings.")
+    return value
 
 
 def _utc_now() -> str:

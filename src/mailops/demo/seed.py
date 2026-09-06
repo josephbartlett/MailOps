@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from mailops.core.config import AppConfig
 from mailops.index.db import (
@@ -29,9 +30,13 @@ DEMO_ACCOUNT_ID = "demo@example.com"
 DEMO_PROVIDER = "demo_local"
 
 
-def seed_demo_mailbox(config: AppConfig) -> DemoSeedResult:
-    """Upsert a deterministic local-only mailbox fixture."""
+def seed_demo_mailbox(config: AppConfig, *, now: datetime | None = None) -> DemoSeedResult:
+    """Upsert stable demo identities with dates relative to the current UTC day."""
 
+    anchor = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    anchor = anchor.replace(hour=12, minute=0, second=0, microsecond=0)
+    fixture_epoch = datetime(2026, 4, 10, 12, tzinfo=timezone.utc)
+    shift = anchor - fixture_epoch
     initialize_database(config)
     with connect_db(config.db_path) as connection:
         upsert_account(
@@ -62,7 +67,7 @@ def seed_demo_mailbox(config: AppConfig) -> DemoSeedResult:
             can_sync=True,
             can_create_draft=False,
             last_uid=5,
-            last_sync_at="2026-04-10T12:00:00+00:00",
+            last_sync_at=anchor.isoformat(),
         )
         upsert_folder(
             connection,
@@ -77,10 +82,10 @@ def seed_demo_mailbox(config: AppConfig) -> DemoSeedResult:
             can_sync=True,
             can_create_draft=False,
             last_uid=1,
-            last_sync_at="2026-04-10T12:00:00+00:00",
+            last_sync_at=anchor.isoformat(),
         )
 
-        for item in _demo_messages():
+        for item in _demo_messages(shift):
             upsert_thread(
                 connection,
                 thread_id=item["thread_id"],
@@ -122,8 +127,8 @@ def seed_demo_mailbox(config: AppConfig) -> DemoSeedResult:
     return DemoSeedResult(account_id=DEMO_ACCOUNT_ID, threads=5, messages=6)
 
 
-def _demo_messages() -> list[dict[str, object]]:
-    return [
+def _demo_messages(shift: timedelta = timedelta()) -> list[dict[str, object]]:
+    messages = [
         {
             "thread_id": "demo-thread-scheduling",
             "message_id": "demo-message-scheduling",
@@ -221,3 +226,7 @@ def _demo_messages() -> list[dict[str, object]]:
             "uid": 4,
         },
     ]
+    for message in messages:
+        for field in ("sent_at", "received_at"):
+            message[field] = (datetime.fromisoformat(message[field]) + shift).isoformat()
+    return messages

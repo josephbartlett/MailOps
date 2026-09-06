@@ -13,6 +13,7 @@ Use this skill to move an existing MailOps draft batch through review, safe mate
 - Apply only safe `create_draft` actions. Do not send, delete, archive, bulk move, or apply provider rules.
 - Use Proton Bridge credentials only as transient runtime input.
 - If the batch scope, action type, recipient, subject, or body is unclear, stop and show the exact batch instead of applying.
+- Resolve the intended existing absolute `MAILOPS_HOME` before using these commands. The default `.mailops` is relative to the current directory; do not create a fresh store while trying to inspect an existing batch.
 
 ## Inspect
 
@@ -26,12 +27,12 @@ Confirm:
 - `highest_risk` is acceptable for a draft action
 - every action type is `create_draft`
 - draft account, To, Cc, Bcc, subject, and body are expected
-- batch status is `pending` before apply
+- batch status is `pending` for a new application; inspect action execution states before any recovery attempt
 - no action resembles send, delete, archive, bulk move, or rule application
 
 ## Apply
 
-Apply only after user approval:
+Apply only after user approval of the exact batch. Reuse existing approval when the account, content, recipients and scope have not changed:
 
 ```powershell
 mailops apply <batch_id>
@@ -65,4 +66,4 @@ Report whether:
 - no send path was invoked
 - any actions remain pending or failed
 
-If anything fails, preserve the review-first boundary and summarize the failure without retrying destructive or unsupported operations.
+If anything fails, inspect local execution state and provider syncback before a retry. An interrupted or uncertain IMAP append may already have created a draft. Do not recreate the batch or retry blindly; report an unresolved provider result when reconciliation cannot establish it. Never infer that no mail was sent solely from a draft being present; report the operations actually observed.

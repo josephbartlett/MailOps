@@ -117,10 +117,15 @@ def create_draft_review_batch(config: AppConfig, prompt: str) -> DraftBatchResul
             draft_id = new_identifier("draft")
             action_id = new_identifier("action")
             draft = _build_local_draft(candidate)
+            message_id = _canonical_message_id(candidate["provider_message_id"])
             create_draft_proposal(
                 connection,
                 proposal_id=draft_id,
                 thread_id=str(candidate["thread_id"]),
+                account_id=str(candidate["account_id"]),
+                to_recipients=[str(candidate["sender"])],
+                in_reply_to=message_id,
+                reference_message_ids=[message_id] if message_id else [],
                 style_profile=draft["style_profile"],
                 proposed_subject=draft["subject"],
                 proposed_body=draft["body"],
@@ -186,6 +191,7 @@ def _select_candidates(
             threads.importance_score AS importance_score,
             threads.classification_tags AS classification_tags,
             messages.sender AS sender,
+            messages.provider_message_id AS provider_message_id,
             messages.body_text AS body_text,
             messages.snippet AS snippet
         FROM threads
@@ -215,6 +221,7 @@ def _select_candidates(
             "importance_score": float(row["importance_score"]),
             "classification_tags": _json_list(row["classification_tags"]),
             "sender": str(row["sender"]),
+            "provider_message_id": str(row["provider_message_id"]),
             "body_text": str(row["body_text"]),
             "snippet": str(row["snippet"]),
         }
@@ -297,6 +304,13 @@ def _friendly_name(sender: str) -> str:
     if not tokens:
         return "there"
     return tokens[0].capitalize()
+
+
+def _canonical_message_id(raw_value: object) -> str | None:
+    value = str(raw_value or "").strip()
+    if value.startswith("<") and value.endswith(">") and "\r" not in value and "\n" not in value:
+        return value
+    return None
 
 
 def _since_days_for_prompt(prompt: str) -> int:

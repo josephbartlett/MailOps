@@ -3,11 +3,13 @@ from __future__ import annotations
 from email.message import EmailMessage
 
 from pydantic import SecretStr
+import pytest
 
 from mailops.adapters.proton_bridge.adapter import ProtonBridgeAdapter
 from mailops.adapters.proton_bridge.bridge_discovery import BridgeDiscoveryOverrides
 from mailops.adapters.proton_bridge.imap_sync import ImapSyncRequest, classify_folder_role, parse_list_response
 from mailops.core.config import AppConfig
+from mailops.core.exceptions import AdapterError
 from mailops.index.db import connect_db, get_table_counts
 from mailops.index.queries import list_unanswered_threads
 from mailops.index.search import SearchRequest, search_messages
@@ -99,6 +101,10 @@ class FakeImapClient:
         self.selected_mailbox = mailbox
         return "OK", [b"2"]
 
+    def response(self, code: str) -> tuple[str, list[bytes]]:
+        assert code == "UIDVALIDITY"
+        return code, [b"100"]
+
     def uid(self, command: str, *args: object) -> tuple[str, list[object]]:
         mailbox = self.mailboxes[self.selected_mailbox]
         if command == "SEARCH":
@@ -111,6 +117,7 @@ class FakeImapClient:
             return "OK", [" ".join(str(uid) for uid in uids).encode("utf-8")]
 
         if command == "FETCH":
+            assert "BODY.PEEK[]" in str(args[1])
             uid = int(args[0])
             message = mailbox[uid]
             metadata = (
@@ -363,3 +370,145 @@ def test_proton_folder_capabilities_fall_back_to_names() -> None:
     assert classify_folder_role("All Mail", []) == "all_mail"
     assert classify_folder_role("Labels/Finance", []) == "label"
     assert classify_folder_role("Folders/Clients", []) == "folder"
+
+
+def _sync_with_client(config, client, *, account="ops@example.com", limit=25):
+    return ProtonBridgeAdapter(config, imap_client_factory=lambda endpoint: client).sync(
+        ImapSyncRequest(folders=["INBOX"], limit=limit),
+        overrides=BridgeDiscoveryOverrides(
+            username=account, password=SecretStr("bridge-pass"), account_email=account,
+        ),
+    )
+
+
+def test_same_message_id_in_two_accounts_preserves_both_accounts(tmp_path) -> None:
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    _sync_with_client(config, FakeImapClient())
+    result = _sync_with_client(config, FakeImapClient(), account="second@example.com")
+    assert result.messages_indexed == 2
+    with connect_db(config.db_path) as connection:
+        rows = connection.execute(
+            """SELECT messages.account_id, threads.account_id AS thread_account, folders.account_id AS folder_account
+            FROM messages JOIN threads ON threads.id = messages.thread_id
+            JOIN folder_messages ON folder_messages.message_id = messages.id
+            JOIN folders ON folders.id = folder_messages.folder_id"""
+        ).fetchall()
+    assert len(rows) == 4
+    assert all(row["account_id"] == row["thread_account"] == row["folder_account"] for row in rows)
+    assert len(search_messages(config, SearchRequest(query="invoice", account_id="ops@example.com"))) == 2
+
+
+def test_uidvalidity_change_restarts_bounded_slice_and_retains_history(tmp_path) -> None:
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    _sync_with_client(config, FakeImapClient())
+
+    class ResetClient(SingleInboundImapClient):
+        def response(self, code):
+            return code, [b"200"]
+
+    result = _sync_with_client(config, ResetClient(), limit=1)
+    assert result.messages_indexed == 1
+    assert any("UIDVALIDITY" in warning for warning in result.warnings)
+    with connect_db(config.db_path) as connection:
+        folder = connection.execute("SELECT last_uid, uid_validity FROM folders").fetchone()
+        assert tuple(folder) == (1, "200")
+        assert connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM folder_messages").fetchone()[0] == 1
+
+
+def test_missing_uidvalidity_cannot_advance_a_cursor(tmp_path) -> None:
+    class MissingValidityClient(FakeImapClient):
+        def response(self, code):
+            return code, [None]
+
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    result = _sync_with_client(config, MissingValidityClient())
+    assert result.messages_indexed == 0
+    assert any("UIDVALIDITY" in error for error in result.errors)
+    with connect_db(config.db_path) as connection:
+        assert connection.execute("SELECT last_uid FROM folders").fetchone()[0] == 0
+        assert connection.execute("SELECT sync_status FROM accounts").fetchone()[0] == "failed"
+
+
+def test_reversed_imap_range_does_not_refetch_last_message(tmp_path) -> None:
+    class ReversedRangeClient(FakeImapClient):
+        def uid(self, command, *args):
+            if command == "SEARCH" and args[-1] != "ALL":
+                return "OK", [b"2"]
+            if command == "FETCH":
+                raise AssertionError("Already indexed UID must not be refetched")
+            return super().uid(command, *args)
+
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    _sync_with_client(config, FakeImapClient())
+    result = _sync_with_client(config, ReversedRangeClient())
+    assert result.messages_indexed == 0
+    assert result.errors == []
+    assert result.warnings == []
+
+
+def test_fetch_uid_mismatch_is_retried_without_advancing_cursor(tmp_path) -> None:
+    class WrongUidClient(FakeImapClient):
+        def uid(self, command, *args):
+            status, data = super().uid(command, *args)
+            if command == "FETCH" and args[0] == "1":
+                metadata, body = data[0]
+                return status, [(metadata.replace(b"UID 1 ", b"UID 99 "), body)]
+            return status, data
+
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    result = _sync_with_client(config, WrongUidClient())
+    assert len(result.errors) == 1
+    with connect_db(config.db_path) as connection:
+        assert connection.execute("SELECT last_uid FROM folders").fetchone()[0] == 0
+        assert connection.execute("SELECT uid FROM folder_messages").fetchone()[0] == 2
+
+
+def test_malformed_date_does_not_abort_sync(tmp_path) -> None:
+    client = FakeImapClient()
+    client.mailboxes["INBOX"][1]["raw"] = client.mailboxes["INBOX"][1]["raw"].replace(
+        b"Date: Tue, 07 Apr 2026 09:58:00 +0000", b"Date: invalid"
+    )
+    result = _sync_with_client(AppConfig(home_dir=tmp_path / ".mailops"), client)
+    assert result.messages_indexed == 2
+    assert result.errors == []
+
+
+def test_failed_first_uid_is_not_skipped_when_new_mail_arrives(tmp_path):
+    class FirstFetchFails(FakeImapClient):
+        def uid(self, command, *args):
+            if command == "FETCH" and args[0] == "1":
+                return "NO", []
+            return super().uid(command, *args)
+
+    config = AppConfig(home_dir=tmp_path / ".mailops")
+    _sync_with_client(config, FirstFetchFails(), limit=2)
+    client = FetchFailureImapClient()
+    # New UID 3 arrives, but a two-message retry must start at failed UID 1.
+    result = _sync_with_client(config, client, limit=2)
+    assert result.messages_indexed == 1
+    with connect_db(config.db_path) as connection:
+        assert [row[0] for row in connection.execute("SELECT uid FROM folder_messages ORDER BY uid")] == [1, 2]
+
+
+def test_missing_message_id_uses_content_identity_not_folder_local_uid(tmp_path):
+    from mailops.adapters.proton_bridge.imap_sync import normalize_imap_message
+
+    first = b"From: sender@example.com\nSubject: First\n\nFirst message"
+    second = b"From: sender@example.com\nSubject: Second\n\nSecond message"
+    messages = [normalize_imap_message(
+        account_id="ops@example.com", account_email="ops@example.com", uid=1,
+        raw_message=raw, flags=[], internal_date=None,
+    ) for raw in (first, second)]
+    assert messages[0].provider_message_id != messages[1].provider_message_id
+
+
+def test_sync_account_mismatch_fails_before_login(tmp_path):
+    client = FakeImapClient()
+    adapter = ProtonBridgeAdapter(AppConfig(home_dir=tmp_path), imap_client_factory=lambda endpoint: client)
+    with pytest.raises(AdapterError, match="does not match"):
+        adapter.sync(
+            ImapSyncRequest(account_id="wrong@example.com"),
+            overrides=BridgeDiscoveryOverrides(username="ops@example.com", password=SecretStr("password")),
+        )
+    assert client.login_calls == []

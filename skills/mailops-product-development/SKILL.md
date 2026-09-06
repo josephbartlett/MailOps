@@ -35,21 +35,22 @@ sync -> inspect -> triage -> draft -> review -> apply -> audit
 - Proton Bridge discovery, sync, draft materialization, and provider draft lookup must stay separate concerns.
 - Gmail remains API-first; do not force Gmail through IMAP for symmetry.
 - Rule generation may preview provider-native artifacts, but provider rule application must remain unimplemented unless a future reviewed policy gate is added.
+- Keep repository guidance concise and link to maintained implementation and workflow docs. Turn observed failures into focused regression coverage or a useful automated check; use independent review when the change warrants it, without fixed reviewer roles or duplicate orchestration systems.
 
 ## Testing
 
-Run before closing work:
+Install the repository's development dependencies as documented, then run the shared offline validation entrypoint before closing work:
 
 ```bash
-python -m pytest
-PYTHONPATH=src python -m mailops.cli.main --help
+python scripts/validate.py
 ```
 
-If Proton behavior changed and Bridge is reachable, also run:
+The entrypoint runs repository checks, lint, tests and CLI smoke checks against temporary state. For focused test runs, use `python -m pytest <test_path>`. Use the source tree for individual CLI checks; on PowerShell, set `$env:PYTHONPATH = "src"`.
+
+If Proton behavior changed, also verify discovery:
 
 ```bash
-PYTHONPATH=src python -m mailops.cli.main doctor
-PYTHONPATH=src python -m mailops.cli.main connect proton --list-profiles
+PYTHONPATH=src python -m mailops.cli.main connect proton
 ```
 
-Use `mailops demo seed` for local-only workflow validation that must not depend on live Proton Bridge.
+Use a unique temporary `MAILOPS_HOME` for CLI smoke checks and `mailops demo seed`; never seed the operator's mailbox store. Restore previous environment values in `finally`. `doctor` actively probes Bridge TCP endpoints, so reserve it for requested connection diagnostics. Read `$mailops-proton-validation` only when live Proton validation is in scope; report skipped live checks honestly.

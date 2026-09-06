@@ -114,7 +114,6 @@ def sync_review_batch_provider_drafts(
                         "mailbox": lookup.mailbox,
                         "uid": lookup.uid,
                         "provider_message_id": lookup.provider_message_id,
-                        "subject": lookup.subject,
                         "status": lookup.status,
                     },
                 )

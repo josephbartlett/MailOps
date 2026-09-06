@@ -6,6 +6,40 @@ MailOps follows Semantic Versioning. See `docs/release-process.md` for versionin
 
 - No unreleased changes.
 
+## 0.2.0 - 2026-09-06
+
+### Fixed
+
+- Account-scoped message identity with a transactional migration preserving local IDs and content.
+- UIDVALIDITY-bound Proton sync, returned UID validation, bounded retry correctness, and PEEK fetches.
+- Draft references bind Message-ID and UIDVALIDITY; legacy UID-only references report unverified instead of claiming unrelated drafts.
+- Frozen reply envelopes, action risk floors, reviewed profile/account binding, and per-action approval checks.
+- Durable draft execution claims and explicit uncertain states to prevent duplicate retries and unsafe rollback.
+- Standard TOML parsing and validation; credential/traceback redaction and reliable SQLite/log handle closure.
+- Literal terminal rendering prevents untrusted mail markup or control characters from hiding reviewed content.
+- Relative demo timestamps and date-independent review tests.
+- Corrected cross-repository state targeting, credentials, installation, and release guidance in all six Codex skills.
+
+### Added
+
+- Isolated validation runner, architectural/documentation invariants, focused lint, private-package checks, and Windows/Linux CI.
+- Repository harness guide and a quality/debt record separating tested behavior from live operational validation.
+- Test isolation from operator settings and real network connections.
+
+### Changed
+
+- Development dependencies include patched pytest (9.0.3+) and repeatable lint/build/advisory tools.
+- Updated Rich and Twine compatibility so validation accepts current wheel metadata (2.5).
+- Python 3.10 uses `tomli` for Proton configuration; later versions use the standard library.
+- Removed the obsolete demo-seeding placeholder script; use `mailops demo seed`.
+- Legacy drafts without reviewed recipient envelopes require recreation; ambiguous provider attempts require inspection before recovery.
+
+### Upgrade notes
+
+- Back up the operational MailOps home before running this version. The next state-using command performs a transactional schema migration; content already lost to older cross-account collisions cannot be reconstructed by migration.
+- Legacy draft proposals without reviewed recipients require recreation. Legacy UID-only draft references report `unverified`; uncertain provider attempts require manual inspection before recovery.
+- Live Bridge acceptance remains separate from the automated release checks. Sending, deletion, bulk mutation, provider rules, and Gmail runtime remain unimplemented.
+
 ## 0.1.0 - 2026-04-10
 
 Initial public alpha.

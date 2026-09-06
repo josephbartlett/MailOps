@@ -20,7 +20,7 @@ from mailops.adapters.proton_bridge.drafts import (
     DraftLookupResult,
     build_draft_message,
     parse_append_provider_ref,
-    parse_draft_provider_ref,
+    parse_draft_reference,
 )
 from mailops.adapters.proton_bridge.imap_sync import (
     ImapFolder,
@@ -41,8 +41,10 @@ from mailops.core.models import SyncResult
 from mailops.index.db import (
     connect_db,
     get_folder_last_uid,
+    get_folder_uid_validity,
     initialize_database,
     link_message_to_folder,
+    reset_folder_uid_state,
     upsert_account,
     upsert_account_alias,
     upsert_folder,
@@ -87,7 +89,7 @@ class ProtonBridgeAdapter:
         except AdapterError:
             raise
         except Exception as exc:
-            raise AdapterError(f"Proton Bridge folder listing failed: {exc}") from exc
+            raise AdapterError(f"Proton Bridge folder listing failed ({type(exc).__name__}).") from exc
         finally:
             self._logout(client)
 
@@ -121,7 +123,7 @@ class ProtonBridgeAdapter:
         except AdapterError:
             raise
         except Exception as exc:
-            raise AdapterError(f"Proton Bridge draft creation failed: {exc}") from exc
+            raise AdapterError(f"Proton Bridge draft creation failed ({type(exc).__name__}).") from exc
         finally:
             self._logout(client)
 
@@ -134,19 +136,31 @@ class ProtonBridgeAdapter:
     ) -> DraftLookupResult:
         """Resolve a MailOps provider draft ref back to Proton Drafts metadata."""
 
+        try:
+            reference = parse_draft_reference(provider_ref)
+        except ValueError as exc:
+            raise AdapterError("Invalid Proton draft provider reference.") from exc
+        mailbox, uid, message_id = reference.mailbox, reference.uid, reference.message_id
+        if uid is not None and reference.uid_validity is None and message_id is None:
+            return DraftLookupResult(
+                account_id=account_id, provider_ref=provider_ref, mailbox=mailbox, uid=uid, status="unverified",
+            )
         endpoint = self.discover(overrides=overrides)
         client = self._login(endpoint)
-        mailbox, uid, message_id = parse_draft_provider_ref(provider_ref)
         try:
             status, _ = client.select(self._imap_mailbox_name(mailbox), readonly=True)
             if status != "OK":
                 raise AdapterError(f"Unable to select Proton draft mailbox '{mailbox}'.")
             resolved_uid = uid
+            if reference.uid_validity is not None and self._read_uid_validity(client) != reference.uid_validity:
+                resolved_uid = None
             if resolved_uid is None and message_id:
                 status, search_data = client.uid("SEARCH", "HEADER", "Message-ID", message_id)
                 if status != "OK":
                     raise AdapterError(f"Unable to search Proton draft mailbox '{mailbox}'.")
                 matches = parse_search_uids(search_data)
+                if len(matches) > 1:
+                    raise AdapterError("Proton draft lookup found multiple messages with the expected Message-ID.")
                 resolved_uid = matches[0] if matches else None
             if resolved_uid is None:
                 return DraftLookupResult(
@@ -177,12 +191,17 @@ class ProtonBridgeAdapter:
                 )
 
             parsed = message_from_bytes(raw_headers, policy=default)
+            if fetched_uid != resolved_uid:
+                raise AdapterError("Proton draft lookup returned a different UID than requested.")
+            fetched_message_id = _canonical_message_id(parsed.get("Message-ID"))
+            if message_id is not None and fetched_message_id != message_id:
+                raise AdapterError("Proton draft lookup returned a different Message-ID than expected.")
             return DraftLookupResult(
                 account_id=account_id,
                 provider_ref=provider_ref,
                 mailbox=mailbox,
                 uid=fetched_uid,
-                provider_message_id=_canonical_message_id(parsed.get("Message-ID")) or message_id,
+                provider_message_id=fetched_message_id,
                 subject=_decode_header_value(parsed.get("Subject", "")) or "(no subject)",
                 from_address=_extract_primary_address(parsed.get("From", "")).lower(),
                 to_recipients=[item.lower() for item in _extract_addresses(parsed.get_all("To", []))],
@@ -195,15 +214,17 @@ class ProtonBridgeAdapter:
         except AdapterError:
             raise
         except ValueError as exc:
-            raise AdapterError(str(exc)) from exc
+            raise AdapterError("Unable to parse Proton draft metadata.") from exc
         except Exception as exc:
-            raise AdapterError(f"Proton Bridge draft lookup failed: {exc}") from exc
+            raise AdapterError(f"Proton Bridge draft lookup failed ({type(exc).__name__}).") from exc
         finally:
             self._logout(client)
 
     def sync(self, request: ImapSyncRequest, *, overrides: BridgeDiscoveryOverrides | None = None) -> SyncResult:
         endpoint = self.discover(overrides=overrides)
-        account_id = request.account_id or endpoint.resolved_account_id()
+        account_id = endpoint.resolved_account_id()
+        if request.account_id is not None and request.account_id.strip().lower() != account_id:
+            raise AdapterError("Requested sync account does not match the resolved Proton identity; select its profile or explicit canonical identity.")
         account_email = endpoint.account_email or endpoint.username or account_id
         result = SyncResult(account_id=account_id, provider=self.provider_name)
 
@@ -240,6 +261,7 @@ class ProtonBridgeAdapter:
                 for folder in target_folders:
                     folder_id = self._folder_record_id(account_id, folder.name)
                     prior_last_uid = get_folder_last_uid(connection, folder_id)
+                    prior_uid_validity = get_folder_uid_validity(connection, folder_id)
                     upsert_folder(
                         connection,
                         folder_id=folder_id,
@@ -259,6 +281,16 @@ class ProtonBridgeAdapter:
                         result.errors.append(f"Failed to select folder '{folder.name}'.")
                         continue
                     message_count = self._parse_exists_count(select_data)
+                    uid_validity = self._read_uid_validity(client)
+                    if uid_validity is None:
+                        result.errors.append(f"Folder '{folder.name}' did not supply UIDVALIDITY; cursor safety cannot be verified.")
+                        continue
+                    if prior_uid_validity != uid_validity and (prior_last_uid or prior_uid_validity is not None):
+                        reset_folder_uid_state(connection, folder_id, uid_validity)
+                        prior_last_uid = 0
+                        result.warnings.append(
+                            f"UIDVALIDITY for '{folder.name}' changed or was previously unknown; restarting a bounded initial sync. Indexed message history is retained."
+                        )
 
                     search_query = "ALL" if prior_last_uid == 0 else f"UID {prior_last_uid + 1}:*"
                     status, search_data = client.uid("SEARCH", search_query)
@@ -266,22 +298,25 @@ class ProtonBridgeAdapter:
                         result.errors.append(f"Failed to search folder '{folder.name}'.")
                         continue
 
-                    all_uids = parse_search_uids(search_data)
+                    all_uids = sorted({uid for uid in parse_search_uids(search_data) if uid > prior_last_uid})
                     if not all_uids:
                         if message_count == 0:
                             result.warnings.append(f"Folder '{folder.name}' currently reports 0 messages.")
-                        elif message_count is not None:
+                        elif message_count is not None and prior_last_uid == 0:
                             result.warnings.append(
                                 f"Folder '{folder.name}' reports {message_count} messages, but Bridge returned 0 search results."
                             )
-                    selected_uids, warning = self._select_uids(all_uids, prior_last_uid, request.limit, folder.name)
+                    selected_uids, warning = self._select_uids(
+                        all_uids, prior_last_uid, request.limit, folder.name,
+                        initial_sync=prior_uid_validity != uid_validity,
+                    )
                     if warning is not None:
                         result.warnings.append(warning)
 
                     latest_uid = prior_last_uid
                     failed_fetch_uids: list[int] = []
                     for uid in selected_uids:
-                        status, fetch_data = client.uid("FETCH", str(uid), "(UID FLAGS INTERNALDATE RFC822)")
+                        status, fetch_data = client.uid("FETCH", str(uid), "(UID FLAGS INTERNALDATE BODY.PEEK[])")
                         if status != "OK":
                             result.errors.append(f"Failed to fetch UID {uid} from '{folder.name}'.")
                             failed_fetch_uids.append(uid)
@@ -289,18 +324,20 @@ class ProtonBridgeAdapter:
 
                         try:
                             parsed_uid, flags, internal_date, raw_message = parse_fetch_response(fetch_data)
-                        except ValueError as exc:
-                            result.errors.append(f"Failed to parse UID {uid} from '{folder.name}': {exc}")
+                            if parsed_uid != uid:
+                                raise ValueError("FETCH returned a different UID than requested")
+                            normalized = normalize_imap_message(
+                                account_id=account_id,
+                                account_email=account_email,
+                                uid=parsed_uid,
+                                raw_message=raw_message,
+                                flags=flags,
+                                internal_date=internal_date,
+                            )
+                        except (ValueError, LookupError, TypeError, OverflowError) as exc:
+                            result.errors.append(f"Failed to parse UID {uid} from '{folder.name}' ({type(exc).__name__}).")
                             failed_fetch_uids.append(uid)
                             continue
-                        normalized = normalize_imap_message(
-                            account_id=account_id,
-                            account_email=account_email,
-                            uid=parsed_uid,
-                            raw_message=raw_message,
-                            flags=flags,
-                            internal_date=internal_date,
-                        )
                         thread_id = normalized.thread_record_id(account_id)
                         message_id = normalized.message_record_id(account_id)
                         last_message_at = (
@@ -369,14 +406,17 @@ class ProtonBridgeAdapter:
                         is_selectable=folder.is_selectable,
                         can_sync=folder.can_sync,
                         can_create_draft=folder.can_create_draft,
+                        uid_validity=uid_validity,
                         last_uid=latest_uid,
                         last_sync_at=sync_timestamp,
                     )
                     result.folders_synced.append(folder.name)
+                if result.errors:
+                    connection.execute("UPDATE accounts SET sync_status = 'failed' WHERE id = ?", (account_id,))
         except AdapterError:
             raise
         except Exception as exc:
-            raise AdapterError(f"Proton Bridge sync failed: {exc}") from exc
+            raise AdapterError(f"Proton Bridge sync failed ({type(exc).__name__}).") from exc
         finally:
             self._logout(client)
 
@@ -397,13 +437,13 @@ class ProtonBridgeAdapter:
             try:
                 client = self._build_imap_client(candidate)
             except OSError as exc:
-                connection_errors.append(f"{candidate.host}:{candidate.imap_port} ({exc})")
+                connection_errors.append(f"{candidate.host}:{candidate.imap_port} ({type(exc).__name__})")
                 continue
             try:
                 client.login(candidate.username, password)
             except Exception as exc:
                 self._logout(client)
-                raise AdapterError(f"Proton Bridge login failed at {candidate.host}:{candidate.imap_port}: {exc}") from exc
+                raise AdapterError(f"Proton Bridge login failed at {candidate.host}:{candidate.imap_port} ({type(exc).__name__}).") from exc
             return client
 
         detail = "; ".join(connection_errors) if connection_errors else f"{endpoint.host}:{endpoint.imap_port}"
@@ -434,8 +474,9 @@ class ProtonBridgeAdapter:
         if requested_folders:
             requested = {item.lower(): item for item in requested_folders}
             resolved = [folder for folder in available_folders if folder.name.lower() in requested and folder.can_sync]
-            if not resolved:
-                raise AdapterError("Requested Proton Bridge folders were not found.")
+            missing = set(requested) - {folder.name.lower() for folder in resolved}
+            if missing:
+                raise AdapterError("One or more requested Proton Bridge folders were not found or cannot be synced.")
             return resolved
 
         syncable_folders = [folder for folder in available_folders if folder.can_sync]
@@ -462,10 +503,13 @@ class ProtonBridgeAdapter:
         prior_last_uid: int,
         limit: int,
         folder_name: str,
+        *,
+        initial_sync: bool | None = None,
     ) -> tuple[list[int], str | None]:
         if len(uids) <= limit:
             return uids, None
-        if prior_last_uid == 0:
+        is_initial_sync = prior_last_uid == 0 if initial_sync is None else initial_sync
+        if is_initial_sync:
             selected = uids[-limit:]
             return (
                 selected,
@@ -516,7 +560,21 @@ class ProtonBridgeAdapter:
             return int(raw_value)
         return None
 
+
+    def _read_uid_validity(self, client: object) -> str | None:
+        response = getattr(client, "response", None)
+        if not callable(response):
+            return None
+        _, data = response("UIDVALIDITY")
+        if not data or data[0] is None:
+            return None
+        value = data[0].decode("ascii", "ignore") if isinstance(data[0], bytes) else str(data[0])
+        value = value.strip()
+        return value if value.isdigit() and int(value) > 0 else None
+
     def _imap_mailbox_name(self, folder_name: str) -> str:
+        if any(ord(character) < 32 or ord(character) == 127 for character in folder_name):
+            raise AdapterError("Proton mailbox name contains unsupported control characters.")
         if any(character.isspace() for character in folder_name) or '"' in folder_name:
             escaped = folder_name.replace("\\", "\\\\").replace('"', '\\"')
             return f'"{escaped}"'

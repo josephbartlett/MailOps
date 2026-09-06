@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from email import message_from_bytes
+from datetime import datetime, timedelta, timezone
 
 from pydantic import SecretStr
 from typer.testing import CliRunner
 
 from mailops.adapters.proton_bridge.adapter import ProtonBridgeAdapter
 from mailops.adapters.proton_bridge.bridge_discovery import BridgeDiscoveryOverrides
+from mailops.adapters.proton_bridge.drafts import parse_draft_reference
 from mailops.cli.main import app
 from mailops.core.config import AppConfig
 from mailops.index.db import (
@@ -32,6 +34,7 @@ runner = CliRunner()
 def _seed_waiting_on_me_thread(config: AppConfig) -> str:
     initialize_database(config)
     thread_id = "thread_sched_001"
+    message_at = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     with connect_db(config.db_path) as connection:
         upsert_account(
             connection,
@@ -45,7 +48,7 @@ def _seed_waiting_on_me_thread(config: AppConfig) -> str:
             connection,
             alias_email="ops@example.com",
             account_id="ops@example.com",
-            provider_username="ops@example.com",
+            provider_username="bridge-user",
             is_primary=True,
         )
         upsert_thread(
@@ -55,7 +58,7 @@ def _seed_waiting_on_me_thread(config: AppConfig) -> str:
             provider_thread_id="provider-thread-001",
             subject="Scheduling next steps",
             participants=["client@example.com", "ops@example.com"],
-            last_message_at="2026-04-08T10:00:00+00:00",
+            last_message_at=message_at,
             unread_count=1,
             importance_score=0.0,
             followup_state="waiting_on_me",
@@ -70,8 +73,8 @@ def _seed_waiting_on_me_thread(config: AppConfig) -> str:
             to_recipients=["ops@example.com"],
             cc_recipients=[],
             bcc_recipients=[],
-            sent_at="2026-04-08T10:00:00+00:00",
-            received_at="2026-04-08T10:00:00+00:00",
+            sent_at=message_at,
+            received_at=message_at,
             snippet="Can you share availability for a meeting this week?",
             body_text="Can you share availability for a meeting this week?",
             folder_or_label_refs=["INBOX"],
@@ -167,6 +170,9 @@ class FakeDraftExecutionImapClient:
             ],
         )
 
+    def response(self, code: str):
+        return code, [b"7"]
+
     def logout(self) -> tuple[str, list[bytes]]:
         return "BYE", [b"logged out"]
 
@@ -210,7 +216,10 @@ def test_execute_review_batch_materializes_provider_draft(tmp_path, monkeypatch)
     assert executed_batch is not None
     assert executed_batch.status == "executed"
     assert executed_batch.actions[0].execution_status.value == "executed"
-    assert executed_batch.actions[0].provider_ref == "Drafts:uid:99"
+    reference = parse_draft_reference(executed_batch.actions[0].provider_ref)
+    assert reference.uid == 99
+    assert reference.uid_validity == "7"
+    assert reference.message_id == parsed["Message-ID"]
     assert get_pending_action_proposal_count(config) == 0
 
     sync_result = sync_review_batch_provider_drafts(
@@ -253,7 +262,7 @@ def test_custom_draft_review_batch_materializes_provider_draft(tmp_path, monkeyp
             connection,
             alias_email="ops@example.com",
             account_id="ops@example.com",
-            provider_username="ops@example.com",
+            provider_username="bridge-user",
             is_primary=True,
         )
 
@@ -343,7 +352,7 @@ def test_review_batch_show_renders_full_custom_draft_envelope(tmp_path, monkeypa
             connection,
             alias_email="ops@example.com",
             account_id="ops@example.com",
-            provider_username="ops@example.com",
+            provider_username="bridge-user",
             is_primary=True,
         )
 

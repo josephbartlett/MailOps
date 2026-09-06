@@ -54,6 +54,8 @@ class ReviewStatus(str, Enum):
 
 class ExecutionStatus(str, Enum):
     PENDING = "pending"
+    EXECUTING = "executing"
+    UNCERTAIN = "uncertain"
     EXECUTED = "executed"
     BLOCKED = "blocked"
     FAILED = "failed"
@@ -102,6 +104,7 @@ class Folder(MailOpsModel):
     can_sync: bool = True
     can_create_draft: bool = False
     last_uid: int = 0
+    uid_validity: str | None = None
     last_sync_at: datetime | None = None
 
 
@@ -109,6 +112,7 @@ class Message(MailOpsModel):
     id: str
     provider_message_id: str
     thread_id: str
+    account_id: str | None = None
     sender: str
     to: list[str] = Field(default_factory=list)
     cc: list[str] = Field(default_factory=list)

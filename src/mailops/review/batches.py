@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 
 from mailops.core.config import AppConfig
+from mailops.core.policies import effective_risk
 from mailops.core.models import (
     ActionProposal,
     AuditEvent,
@@ -140,9 +141,15 @@ def get_review_batch(config: AppConfig, batch_id: str) -> ReviewBatchDetail | No
         ).fetchall()
 
     summary = _row_to_review_batch_summary(batch_row)
+    actions = [_row_to_action_proposal(row) for row in action_rows]
+    risks = [summary.highest_risk, *[effective_risk(action.type, action.risk_level) for action in actions]]
+    levels = {RiskTier.LOW: 0, RiskTier.MEDIUM: 1, RiskTier.HIGH: 2}
+    summary.highest_risk = max(risks, key=levels.__getitem__)
+    if any(action.execution_status in {ExecutionStatus.EXECUTING, ExecutionStatus.UNCERTAIN, ExecutionStatus.EXECUTED} for action in actions):
+        summary.rollback_available = False
     return ReviewBatchDetail(
         **summary.model_dump(),
-        actions=[_row_to_action_proposal(row) for row in action_rows],
+        actions=actions,
         draft_proposals=[_row_to_draft_proposal(row) for row in draft_rows],
         provider_drafts=[_row_to_provider_draft_snapshot(row) for row in provider_draft_rows],
     )
@@ -166,30 +173,31 @@ def approve_review_batch(config: AppConfig, batch_id: str, *, actor: str = "oper
             result="blocked",
         )
         return batch
-    if batch.status in {"approved", "executed", "partially_executed"}:
-        return batch
-    if batch.status == "rolled_back":
+    if batch.status != "pending":
         return batch
 
     with connect_db(config.db_path) as connection:
-        update_review_batch_status(connection, batch_id=batch_id, status="approved")
-        update_batch_action_statuses(
-            connection,
-            batch_id=batch_id,
-            review_status=ReviewStatus.APPROVED.value,
-            execution_status=ExecutionStatus.PENDING.value,
-        )
-        create_audit_event(
-            connection,
-            event_id=new_identifier("audit"),
-            actor=actor,
-            action_type="review_batch_approved",
-            target_ref=batch_id,
-            timestamp=_utc_now(),
-            result="approved",
-            before_state={"status": batch.status},
-            after_state={"status": "approved"},
-        )
+        changed = connection.execute(
+            "UPDATE review_batches SET status = 'approved' WHERE id = ? AND status = 'pending'",
+            (batch_id,),
+        ).rowcount
+        if changed:
+            connection.execute(
+                """UPDATE action_proposals SET review_status = 'approved'
+                   WHERE batch_id = ? AND review_status = 'pending' AND execution_status = 'pending'""",
+                (batch_id,),
+            )
+            create_audit_event(
+                connection,
+                event_id=new_identifier("audit"),
+                actor=actor,
+                action_type="review_batch_approved",
+                target_ref=batch_id,
+                timestamp=_utc_now(),
+                result="approved",
+                before_state={"status": batch.status},
+                after_state={"status": "approved"},
+            )
 
     return get_review_batch(config, batch_id)
 
@@ -203,20 +211,28 @@ def rollback_review_batch(config: AppConfig, batch_id: str, *, actor: str = "ope
         return None
     if batch.status == "rolled_back":
         return batch
-    if any(action.execution_status == ExecutionStatus.EXECUTED for action in batch.actions):
-        _record_batch_audit(
-            config,
-            batch_id=batch_id,
-            actor=actor,
-            action_type="review_batch_rollback_blocked",
-            before_state={"status": batch.status},
-            after_state={"status": batch.status},
-            result="provider_drafts_present",
-        )
-        return batch
-
     proposal_ids = [draft.id for draft in batch.draft_proposals]
     with connect_db(config.db_path) as connection:
+        # Serialize the safety check with apply's durable action claim.
+        connection.execute("BEGIN IMMEDIATE")
+        provider_actions = connection.execute(
+            """SELECT id FROM action_proposals WHERE batch_id = ?
+               AND (execution_status IN ('executing', 'uncertain', 'executed') OR provider_ref IS NOT NULL)""",
+            (batch_id,),
+        ).fetchone()
+        if provider_actions is not None:
+            create_audit_event(
+                connection,
+                event_id=new_identifier("audit"),
+                actor=actor,
+                action_type="review_batch_rollback_blocked",
+                target_ref=batch_id,
+                timestamp=_utc_now(),
+                result="provider_drafts_present_or_uncertain",
+                before_state={"status": batch.status},
+                after_state={"status": batch.status},
+            )
+            return batch
         delete_draft_proposals(connection, proposal_ids=proposal_ids)
         update_batch_action_statuses(
             connection,

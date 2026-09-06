@@ -1,107 +1,61 @@
 # Public Alpha Guide
 
-MailOps v0.1.0 is a local-first, review-first inbox operations harness. It is ready for a public alpha when the release checklist in [release-checklist.md](release-checklist.md) is complete and the operator explicitly approves the release source-control actions.
+MailOps 0.2.0 is a local-first, provider-aware inbox operations harness. It supports
+Proton Bridge discovery, bounded indexing, search, inspection, heuristic triage,
+local draft proposals, reviewed Proton draft creation, reconciliation, and audit
+export. The [release notes](releases/v0.2.0.md) describe the changes and migration.
 
-## What Works
+## Install and upgrade
 
-- Local SQLite runtime bootstrap and diagnostics
-- Proton Bridge discovery on Windows, Linux desktop, and supported WSL-to-Windows topologies
-- Saved non-secret Proton profiles
-- Proton folder listing with role and capability detection
-- Bounded Proton sync into local state
-- Search over synced local messages
-- Read-only local thread/message inspection
-- Thread triage and follow-up classification
-- Natural-language requests compiled into explicit actions or local queries
-- Local draft proposal batches
-- Custom outbound draft proposal batches from explicit operator context
-- Review-first Proton draft materialization through IMAP `APPEND`
-- Provider draft syncback snapshots for executed draft refs
-- Review-only Proton Sieve previews
-- Markdown audit export
-- Local-only demo mailbox fixture for contributors without Proton Bridge
-
-## What Does Not Work Yet
-
-- Gmail OAuth, sync, labels, and draft operations are placeholders.
-- SMTP send is not implemented.
-- Delete, bulk archive, bulk move, and provider rule application are not implemented.
-- Proton draft syncback records provider-visible draft metadata but does not yet import full provider draft bodies into the normal message index.
-- Triage heuristics are useful but still heuristic; they are not a substitute for operator review.
-- Live provider validation currently assumes Proton Bridge is already installed and running.
-
-## Safety Model
-
-MailOps keeps risky provider mutations review-first. In v0.1.0, the only provider write path is creating reviewed Proton drafts. The system does not send mail, delete mail, bulk archive, bulk move, or apply provider rules.
-
-Secrets are intentionally runtime-only. Saved Proton profiles store host, port, username, account email, and canonical email metadata, but not Bridge passwords. Use `MAILOPS_PROTON_PASSWORD` or a transient `--password` override for live Bridge operations.
-
-## Install
-
-```bash
-python -m pip install -e ".[dev]"
-```
-
-For a packaged install after release:
-
-```bash
-python -m pip install mailops
-```
-
-## Demo Workflow
-
-The local demo path does not require Proton Bridge:
-
-```bash
-mailops demo seed
-mailops status
-mailops search "invoice"
-mailops inspect thread demo-thread-finance
-mailops triage --since 0d
-mailops ask "show unanswered finance threads"
-mailops rules propose "filter future messages from vendor.example to label Finance"
-mailops export audit --format markdown
-```
-
-## Proton Workflow
-
-Use the Proton Bridge-generated IMAP username and password, not the Proton account password.
-
-```powershell
-mailops doctor
-mailops connect proton --username operator@example.com --account-email operator@example.com --save-profile work
-$secure = Read-Host "Proton Bridge password" -AsSecureString
-$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-$env:MAILOPS_PROTON_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-mailops connect proton --profile work --list-folders
-mailops sync --profile work --folder INBOX --limit 25
-mailops search "project update"
-mailops inspect thread <thread_id>
-mailops triage --since 3d
-mailops ask "draft replies for scheduling emails from this week"
-mailops draft create --from-account operator@example.com --to stakeholder@example.com --subject "Project update" --body-file draft.md --context-ref repo:current
-mailops review batch list
-mailops review batch show batch_xxxxxxxx
-mailops apply batch_xxxxxxxx
-mailops review batch sync-drafts batch_xxxxxxxx
-mailops export audit --format markdown
-```
-
-Clear the password after the live session:
-
-```powershell
-Remove-Item Env:MAILOPS_PROTON_PASSWORD
-[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-```
-
-## Release Notes Summary
-
-v0.1.0 proves the MailOps operator loop for Proton:
+Use the wheel attached to the [GitHub release](https://github.com/josephbartlett/MailOps/releases/tag/v0.2.0):
 
 ```text
-sync -> inspect -> triage -> draft -> review -> apply -> audit
+python -m pip install ./mailops-0.2.0-py3-none-any.whl
 ```
 
-The release remains intentionally narrow. Proton is the validated provider; Gmail stays out of scope until the Proton loop is stable in public use.
+For development, install `.[dev]` into a virtual environment and run
+`python scripts/validate.py`. See [the harness guide](harness-engineering.md).
+PyPI availability is separate from GitHub publication.
 
-The GitHub Release title is `MailOps v0.1.0: Public Alpha`. Use [releases/v0.1.0.md](releases/v0.1.0.md) as the markdown release body.
+Before upgrading an operational store, stop MailOps operations and back up the
+established `MAILOPS_HOME`. The first state-using command performs schema migration.
+Use an absolute home path when invoking MailOps from another repository. Existing
+overwritten mail cannot be reconstructed by migration; old proposals without
+reviewed recipients must be recreated and reviewed.
+
+## Try the local demo
+
+The shared validation command runs a synthetic demo in temporary state. For an
+interactive demo, select a new temporary `MAILOPS_HOME` and restore the previous
+setting afterward. Never seed demo data into an operational mailbox store.
+
+Once an isolated home is selected, `mailops demo seed`, `mailops search invoice`,
+`mailops inspect thread demo-thread-finance`, and `mailops triage --since 0d` show
+the local workflow without Bridge credentials.
+
+## Work with Proton
+
+Follow [the Windows continuation guide](windows-powershell-handoff.md) or
+[provider notes](provider-proton.md). Select the correct account/profile and a
+bounded sync scope. Use Bridge-generated credentials through transient secure
+input, never password arguments or persisted config.
+
+Inspect every proposal's complete account, recipients, subject, and body before
+authorizing its creation in Proton Drafts. Apply never sends mail. An interrupted
+or uncertain provider attempt blocks retry and local rollback until the operator
+inspects Proton Drafts and audit history. Legacy UID-only references are unverified.
+
+## Alpha limitations
+
+- Gmail runtime, sending, deletion, bulk archive/move, and rule application are
+  unimplemented. Sieve output is preview-only.
+- Threading and triage are heuristic; the bounded index is not a complete mirror
+  of existing message flags and deletions.
+- Provider-draft reconciliation records headers, not full draft bodies in the index.
+- Local state and exports are plaintext; protect them with host permissions,
+  encryption, and backups.
+- Automated tests use synthetic data and provider fakes. They do not establish
+  live Bridge acceptance for an operator's account.
+
+See [quality.md](quality.md) for audit evidence and remaining work, and
+[release-checklist.md](release-checklist.md) for release validation.

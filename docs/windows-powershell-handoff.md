@@ -1,106 +1,37 @@
-# Windows PowerShell Handoff
+# Windows PowerShell continuation
 
-This handoff is for continuing MailOps development from Windows PowerShell with Proton Mail Bridge already running on Windows.
+Start with [AGENTS.md](../AGENTS.md) and [the validation guide](harness-engineering.md).
+This is a runbook, not a snapshot of current accounts, Bridge reachability, or test
+counts. Inspect current state before choosing any live operation.
 
-## Where We Are Leaving Off
-
-MailOps has a working local-first Proton MVP:
-
-- Proton Bridge discovery, profile storage, folder listing, and bounded sync
-- local SQLite mailbox state
-- search and ranked triage
-- role-aware follow-up filtering
-- local draft proposal generation
-- review batches and audit export
-- provider-backed Proton draft materialization through IMAP `APPEND`
-- WSL diagnostics and Windows host fallback for Bridge discovery
-
-The WSL session can read the repo and local SQLite state, but it cannot currently reach Windows Proton Bridge ports.
-
-Latest WSL `mailops doctor` result:
-
-```text
-wsl: detected
-proton_bridge_hosts: 127.0.0.1, 10.255.255.254, 172.25.96.1
-proton_imap:127.0.0.1: connection refused
-proton_smtp:127.0.0.1: connection refused
-proton_imap:10.255.255.254: connection refused
-proton_smtp:10.255.255.254: connection refused
-proton_imap:172.25.96.1: timed out
-proton_smtp:172.25.96.1: timed out
-```
-
-Example local MailOps state from the earlier handoff:
-
-```text
-accounts: 2
-account_aliases: 2
-folders: 2
-threads: 29
-messages: 50
-folder_links: 50
-review_batches: 0
-pending_action_proposals: 0
-```
-
-Saved Proton profiles currently visible from WSL:
-
-```text
-lm-main -> primary Proton Bridge profile
-lm-info -> secondary Proton Bridge profile
-```
-
-Run `py -m mailops.cli.main status` and `py -m mailops.cli.main review batch list` before testing `mailops apply`; do not assume an earlier session has no pending review batches.
-
-Windows `git status` should be checked before making release-oriented assumptions:
-
-```powershell
-git status --short
-```
-
-## Planned Work After Live Validation
-
-The current roadmap is tracked in [roadmap.md](roadmap.md). The most important next slices are:
-
-1. Keep public alpha release actions review-first and operator-approved.
-2. Add configurable sender-role heuristics and allow/block lists for triage.
-3. Continue hardening Proton Bridge edge cases discovered during live validation.
-4. Start Gmail only after the Proton operator loop is stable in public use.
-
-Do not start Gmail until the Proton operator loop is validated end to end.
-
-## PowerShell Setup
-
-From Windows PowerShell:
+## Development validation
 
 ```powershell
 cd C:\Users\decoy\MailOps
-py -m pip install -e ".[dev]"
-$env:PYTHONPATH = "src"
-py -m pytest
+.\.venv\Scripts\python.exe scripts/validate.py
 ```
 
-Expected result:
+The runner uses synthetic temporary state. A successful test suite does not prove
+Bridge connectivity or authorize a real provider write.
 
-```text
-73 passed
-```
+## Select the operational mailbox
 
-Run the local status checks:
+Preserve the original `MAILOPS_HOME` setting, then set it to the established absolute
+mailbox-store path. Run `status`, `review batch list`, and `connect proton --list-profiles`
+to select the actual account/profile. These commands may initialize/migrate local
+state; take a protected backup before using a schema-changing version operationally.
+Never assume example profile names or old mailbox counts apply to the current host.
 
-```powershell
-py -m mailops.cli.main doctor
-py -m mailops.cli.main status
-py -m mailops.cli.main review batch list
-```
+Plain `connect proton` performs discovery without folder listing or synchronization.
+`doctor` performs network reachability probes. Use the selected profile with
+`connect proton --profile <profile> --list-folders` only when live inspection is part
+of the task. Native Windows usually reaches a running Bridge on loopback; verify
+the current host. See [WSL networking](wsl-windows-bridge.md) for that topology.
 
-On Windows, `doctor` should show Proton Bridge IMAP and SMTP reachable on `127.0.0.1` if Bridge is running and exposing the default ports.
+## Runtime credentials
 
-## Proton Bridge Credentials
-
-Use the Proton Bridge-generated IMAP username and password from the Bridge app, not the Proton account password.
-
-Do not store the Bridge password in repo config. Pass it at runtime:
+Use Bridge-generated credentials, not the Proton account password. Read the password
+through a secure prompt; never paste it in commands, chat, config, or logs.
 
 ```powershell
 $secure = Read-Host "Proton Bridge password" -AsSecureString
@@ -112,117 +43,22 @@ try {
 }
 ```
 
-Rotate the Bridge password after testing if it has been pasted into chat or logs.
+Clear the transient password when the authorized operation finishes and restore the
+previous `MAILOPS_HOME` setting. Never print the environment or saved credential data.
 
-## Live Read-Path Validation
+## Live work
 
-Verify that Windows PowerShell can reach Bridge:
+Sync only the selected account, folder, and bounded limit required by the task.
+Read paths are distinct from creating a real draft. When the operator has authorized
+materializing an exact reviewed batch, inspect its full account, To/Cc/Bcc, subject,
+and body with `review batch show <batch_id>`, then use `apply <batch_id>`.
+Follow with `review batch sync-drafts <batch_id>` and a private audit export.
+Do not apply an existing batch merely to test the harness.
 
-```powershell
-py -m mailops.cli.main connect proton --profile lm-main --list-folders
-```
+Sending, deletion, and provider rule application remain unimplemented. Rollback is
+local-only and blocked after a provider attempt exists. If an action is `executing`
+or `uncertain`, inspect Proton Drafts and its audit history; automatic retry and
+rollback are blocked because the provider may already have accepted it.
 
-If profile names need checking:
-
-```powershell
-py -m mailops.cli.main connect proton --list-profiles
-```
-
-If needed, run a bounded sync:
-
-```powershell
-py -m mailops.cli.main sync --provider proton --profile all --folder "All Mail" --limit 50
-py -m mailops.cli.main status
-py -m mailops.cli.main triage --since 3d
-```
-
-## First Live Write-Path Test
-
-This creates a real Proton draft, not a sent email.
-
-Create a local draft batch:
-
-```powershell
-py -m mailops.cli.main ask "draft replies for scheduling emails from this week"
-py -m mailops.cli.main review batch list
-```
-
-Inspect the batch:
-
-```powershell
-py -m mailops.cli.main review batch show batch_xxxxxxxx
-```
-
-Apply the batch:
-
-```powershell
-py -m mailops.cli.main apply batch_xxxxxxxx
-```
-
-Expected result:
-
-- the batch status becomes `executed`
-- each `create_draft` action has `execution_status=executed`
-- each executed action has a `provider_ref` such as `Drafts:uid:<number>`
-- the draft appears in Proton Drafts
-- no email is sent
-
-Confirm locally:
-
-```powershell
-py -m mailops.cli.main review batch show batch_xxxxxxxx
-py -m mailops.cli.main export audit --format markdown
-```
-
-Do not run rollback after provider drafts are materialized. MailOps intentionally blocks local rollback once provider-side state exists.
-
-## Codex Handoff Prompt
-
-```text
-You are continuing MailOps from Windows PowerShell.
-
-Repo:
-C:\Users\decoy\MailOps
-
-Goal:
-Validate the Proton Bridge live write path from Windows, where Bridge is reachable on Windows localhost.
-
-Context:
-- MailOps is a local-first inbox operations harness.
-- Proton Bridge is installed and running on Windows.
-- WSL could sync local state earlier but cannot currently reach Windows Bridge ports.
-- Check current local state with `py -m mailops.cli.main status`; do not assume counts from an earlier session.
-- Provider-backed draft materialization is implemented via IMAP APPEND into Proton Drafts.
-- Sending is not implemented and must not be added for this validation.
-- Rollback is blocked once provider-side drafts exist.
-
-Start:
-1. cd C:\Users\decoy\MailOps
-2. py -m pip install -e ".[dev]"
-3. $env:PYTHONPATH = "src"
-4. py -m pytest
-5. py -m mailops.cli.main doctor
-6. py -m mailops.cli.main connect proton --list-profiles
-7. Set $env:MAILOPS_PROTON_PASSWORD from a secure prompt with the Bridge-generated password.
-8. py -m mailops.cli.main connect proton --profile lm-main --list-folders
-
-Then:
-1. Create a review batch with `py -m mailops.cli.main ask "draft replies for scheduling emails from this week"`.
-2. Inspect it with `py -m mailops.cli.main review batch list` and `py -m mailops.cli.main review batch show <batch_id>`.
-3. Apply it with `py -m mailops.cli.main apply <batch_id>`.
-4. Verify the batch status is executed and the action has a provider_ref.
-5. Confirm the draft appears in Proton Drafts.
-6. Sync provider draft metadata with `py -m mailops.cli.main review batch sync-drafts <batch_id>`.
-7. Export audit with `py -m mailops.cli.main export audit --format markdown`.
-
-Safety:
-- Do not send mail.
-- Do not delete mail.
-- Do not auto-apply rules.
-- Do not persist Bridge passwords.
-- Keep any follow-up fixes covered by tests.
-
-After live validation:
-- Continue with `docs/roadmap.md`.
-- Do not commit, push, tag, publish, or change remotes unless the operator explicitly approves that exact source-control action.
-```
+Continue from [quality.md](quality.md) and [roadmap.md](roadmap.md), with no commit,
+push, tag, publication, or remote changes unless explicitly authorized.

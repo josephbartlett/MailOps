@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Literal, Mapping
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from mailops.core.config import AppConfig
+from mailops.core.exceptions import AdapterError
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_IMAP_PORT = 1143
@@ -20,9 +26,9 @@ CONFIG_SECTION = "providers.proton_bridge"
 class BridgeDiscoveryOverrides(BaseModel):
     profile_name: str | None = None
     host: str | None = None
-    imap_port: int | None = None
-    smtp_port: int | None = None
-    imap_security: str | None = None
+    imap_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    imap_security: Literal["plain", "ssl"] | None = None
     username: str | None = None
     password: SecretStr | None = None
     account_email: str | None = None
@@ -33,9 +39,9 @@ class BridgeDiscoveryOverrides(BaseModel):
 class BridgeEndpoint(BaseModel):
     profile_name: str | None = None
     host: str = DEFAULT_HOST
-    imap_port: int = DEFAULT_IMAP_PORT
-    smtp_port: int = DEFAULT_SMTP_PORT
-    imap_security: str = DEFAULT_IMAP_SECURITY
+    imap_port: int = Field(default=DEFAULT_IMAP_PORT, ge=1, le=65535)
+    smtp_port: int = Field(default=DEFAULT_SMTP_PORT, ge=1, le=65535)
+    imap_security: Literal["plain", "ssl"] = DEFAULT_IMAP_SECURITY
     username: str | None = None
     password: SecretStr | None = None
     account_email: str | None = None
@@ -70,37 +76,20 @@ class BridgeEndpoint(BaseModel):
         }
 
 
-def _parse_scalar(raw_value: str) -> object:
-    value = raw_value.strip()
-    if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
-        return value[1:-1]
-    lowered = value.lower()
-    if lowered in {"true", "false"}:
-        return lowered == "true"
-    try:
-        return int(value)
-    except ValueError:
-        return value
-
-
 def _read_section_from_config(path: Path, section_name: str) -> dict[str, object]:
     if not path.exists():
         return {}
 
-    active_section = ""
-    section_values: dict[str, object] = {}
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            active_section = line[1:-1].strip()
-            continue
-        if active_section != section_name or "=" not in line:
-            continue
-        key, raw_value = line.split("=", 1)
-        section_values[key.strip()] = _parse_scalar(raw_value)
-    return section_values
+    try:
+        with path.open("rb") as handle:
+            values = tomllib.load(handle)
+    except (OSError, ValueError) as exc:
+        raise AdapterError("Unable to read Proton Bridge TOML configuration; check its syntax and access permissions.") from exc
+    for part in section_name.split("."):
+        values = values.get(part, {})
+        if not isinstance(values, dict):
+            raise AdapterError("Proton Bridge configuration must be a TOML table.")
+    return values
 
 
 def _endpoint_from_mapping(values: Mapping[str, object], *, source: str, config_path: Path | None = None) -> BridgeEndpoint | None:

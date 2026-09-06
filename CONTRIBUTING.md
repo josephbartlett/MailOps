@@ -35,11 +35,15 @@ mailops triage --since 0d
 Before closing a change:
 
 ```bash
-python -m pytest
-PYTHONPATH=src python -m mailops.cli.main --help
+python scripts/validate.py
 ```
 
 If Proton behavior changed, also verify Bridge discovery/listing from an environment where Proton Bridge is reachable.
+
+The shared runner includes `python -m pytest` and CLI help, and uses temporary
+state. Tests clear inherited MailOps settings and block real network connections.
+Use [the harness guide](docs/harness-engineering.md) for environment setup and
+intentional provider checks. Do not seed demos in an operational `MAILOPS_HOME`.
 
 ## Versioning and Changelog
 

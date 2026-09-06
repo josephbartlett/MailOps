@@ -6,11 +6,12 @@ MailOps handles email metadata and may create reviewed provider drafts. Treat lo
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | Yes       |
+| 0.2.x   | Current alpha |
+| 0.1.x   | Upgrade recommended; known data-isolation and draft-execution defects |
 
 ## Reporting
 
-Before a public issue is filed for a security concern, contact the maintainer through the repository security channel once the public remote is configured.
+Report security concerns privately through the repository's security reporting channel when available; do not use a public issue for sensitive details.
 
 Do not include mailbox contents, Bridge passwords, OAuth tokens, authorization headers, or raw message bodies in public reports.
 

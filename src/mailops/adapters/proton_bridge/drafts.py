@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid
+import json
 from pydantic import BaseModel, Field
 import re
 
@@ -44,9 +45,17 @@ class DraftLookupResult(BaseModel):
     status: str = "unknown"
 
 
-_APPENDUID_RE = re.compile(r"APPENDUID\s+\d+\s+(?P<uid>\d+)", re.IGNORECASE)
+_APPENDUID_RE = re.compile(r"APPENDUID\s+(?P<uid_validity>\d+)\s+(?P<uid>\d+)", re.IGNORECASE)
+_V2_REF_PREFIX = "proton-draft-v2:"
 _UID_REF_MARKER = ":uid:"
 _MESSAGE_ID_REF_MARKER = ":message-id:"
+
+
+class DraftProviderReference(BaseModel):
+    mailbox: str = Field(min_length=1)
+    uid: int | None = Field(default=None, gt=0)
+    uid_validity: str | None = None
+    message_id: str | None = None
 
 
 def build_draft_message(request: DraftCreateRequest) -> tuple[str, bytes]:
@@ -83,24 +92,45 @@ def parse_append_provider_ref(mailbox: str, response_data: list[bytes | str], fa
         if part not in (None, b"")
     )
     match = _APPENDUID_RE.search(joined)
-    if match is not None:
-        return f"{mailbox}:uid:{match.group('uid')}"
-    return f"{mailbox}:message-id:{fallback_message_id}"
+    reference = DraftProviderReference(
+        mailbox=mailbox,
+        uid=int(match.group("uid")) if match is not None else None,
+        uid_validity=match.group("uid_validity") if match is not None else None,
+        message_id=fallback_message_id,
+    )
+    return _V2_REF_PREFIX + reference.model_dump_json(exclude_none=True)
 
 
 def parse_draft_provider_ref(provider_ref: str) -> tuple[str, int | None, str | None]:
-    """Parse MailOps draft refs such as `Drafts:uid:42` or `Drafts:message-id:<id>`."""
+    """Read current and legacy draft references with the original tuple API."""
+
+    reference = parse_draft_reference(provider_ref)
+    return reference.mailbox, reference.uid, reference.message_id
+
+
+def parse_draft_reference(provider_ref: str) -> DraftProviderReference:
+    """Read durable v2 refs and legacy UID or Message-ID references."""
+
+    if provider_ref.startswith(_V2_REF_PREFIX):
+        reference = DraftProviderReference.model_validate(json.loads(provider_ref[len(_V2_REF_PREFIX):]))
+        if not reference.message_id:
+            raise ValueError("A v2 draft reference requires a Message-ID.")
+        if reference.uid_validity is not None and (
+            not reference.uid_validity.isdigit() or int(reference.uid_validity) <= 0
+        ):
+            raise ValueError("Invalid draft UIDVALIDITY.")
+        return reference
 
     mailbox, marker, remainder = provider_ref.partition(_UID_REF_MARKER)
     if marker:
         try:
-            return mailbox, int(remainder), None
+            return DraftProviderReference(mailbox=mailbox, uid=int(remainder))
         except ValueError as exc:
             raise ValueError(f"invalid draft UID provider ref: {provider_ref}") from exc
 
     mailbox, marker, remainder = provider_ref.partition(_MESSAGE_ID_REF_MARKER)
-    if marker:
-        return mailbox, None, remainder
+    if marker and remainder:
+        return DraftProviderReference(mailbox=mailbox, message_id=remainder)
 
     raise ValueError(f"unsupported draft provider ref: {provider_ref}")
 

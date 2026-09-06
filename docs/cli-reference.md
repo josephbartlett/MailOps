@@ -60,3 +60,9 @@ mailops review batch sync-drafts <batch_id>
 ```
 
 `draft create` records To, Cc, Bcc, subject, body, and context refs in local state. `review batch show` displays that envelope before apply. `apply` may materialize that proposal as a Proton Draft after review; it does not send the message.
+
+Generated reply proposals also freeze their recipients and account at creation.
+`apply` rejects legacy proposals without reviewed recipients. If an action has an
+interrupted or uncertain provider attempt, the batch requires attention, apply
+returns nonzero, and automatic retry/local rollback are blocked. Inspect Proton
+Drafts and the audit trail before any manual recovery.

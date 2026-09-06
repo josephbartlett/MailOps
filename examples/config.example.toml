@@ -1,20 +1,14 @@
-[app]
-environment = "development"
-data_dir = ".mailops/data"
-state_dir = ".mailops/state"
-log_dir = ".mailops/logs"
-redact_logs = true
-model_provider = "openai"
+# Copy to the selected MAILOPS_HOME/config/config.toml.
+# Application settings come from environment variables; see .env.example.
+# Only the Proton provider section is read from this file.
 
 [providers.proton_bridge]
-enabled = true
 host = "127.0.0.1"
 imap_port = 1143
 smtp_port = 1025
 imap_security = "plain"
 username = "bridge-user"
-password = ""
+# Supply MAILOPS_PROTON_PASSWORD at runtime; do not store passwords here.
 account_email = "ops@example.com"
 
-[providers.gmail_api]
-enabled = false
+# Gmail runtime is unimplemented; there is no config flag that enables it.

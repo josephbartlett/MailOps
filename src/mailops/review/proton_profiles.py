@@ -11,6 +11,7 @@ from mailops.adapters.proton_bridge.registry import (
 )
 from mailops.core.config import AppConfig
 from mailops.core.exceptions import AdapterError
+from mailops.index.db import connect_db
 
 
 def resolve_proton_overrides(
@@ -41,4 +42,26 @@ def resolve_proton_overrides(
             )
         if len(matches) == 1:
             profile_overrides = profile_to_overrides(matches[0])
-    return merge_overrides(profile_overrides, explicit)
+    resolved = merge_overrides(profile_overrides, explicit)
+    allowed = {account_id.strip().lower(), account_email.strip().lower()}
+    with connect_db(config.db_path) as connection:
+        aliases = connection.execute(
+            "SELECT alias_email, provider_username FROM account_aliases WHERE account_id = ?", (account_id,)
+        ).fetchall()
+    allowed.update(str(row["alias_email"]).strip().lower() for row in aliases)
+    allowed_usernames = {account_email.strip().lower()}
+    allowed_usernames.update(str(row["alias_email"]).strip().lower() for row in aliases)
+    allowed_usernames.update(
+        str(row["provider_username"]).strip().lower() for row in aliases if row["provider_username"]
+    )
+    if profile_overrides.username:
+        allowed_usernames.add(profile_overrides.username.strip().lower())
+    for candidate in (profile_overrides, explicit, resolved):
+        if candidate is None:
+            continue
+        for identity in (candidate.account_email, candidate.canonical_email):
+            if identity is not None and identity.strip().lower() not in allowed:
+                raise AdapterError("Proton profile identity does not match the reviewed draft account.")
+        if candidate.username is not None and candidate.username.strip().lower() not in allowed_usernames:
+            raise AdapterError("Proton login username does not match the saved profile or known aliases for the reviewed draft account.")
+    return resolved

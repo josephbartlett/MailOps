@@ -1,78 +1,51 @@
-# Release Checklist
+# Release checks
 
-Use this checklist before tagging and publishing a MailOps release. See [release-process.md](release-process.md) for SemVer, changelog, GitHub Release, PyPI, and repository visibility rules.
+Use [release-process.md](release-process.md) for SemVer and publication rules.
+The current release is 0.2.0; use [its notes](releases/v0.2.0.md) for upgrade details.
 
-## Repository
+## Candidate
 
-- [ ] Confirm `C:\Users\decoy\MailOps` is inside the intended Git repository.
-- [ ] Confirm the remote origin is `https://github.com/josephbartlett/MailOps`.
-- [ ] Update `pyproject.toml` `[project.urls]` with the actual repository, documentation, and issue tracker URLs.
-- [ ] Confirm no local-only state is staged: `.mailops/`, caches, logs, and temporary screenshots must stay out of the release.
-- [ ] Confirm license ownership is still Joey Bartlett and MIT.
-- [ ] Do not commit, push, tag, publish, or change remotes unless the operator explicitly approves that exact source-control action.
+- Confirm repository, branch, remote, outstanding changes, and existing remote tags.
+- Align `pyproject.toml`, `src/mailops/__init__.py`, changelog, release notes, README,
+  and the supported-version table. Do not reuse or move an existing release tag.
+- Inspect the exact staged file list/diff. Exclude mailbox stores, environment files,
+  credentials, logs, databases and sidecars, caches, and temporary artifacts.
+- Confirm MIT licensing, real project URLs, secret-free config examples, and the
+  unchanged provider safety boundaries.
+- Confirm operator authorization for the requested commit/push/tag/release actions.
+  A GitHub release does not authorize PyPI publication or a visibility change.
 
-## Version
+## Automated validation
 
-- [x] `pyproject.toml` version is `0.1.0`.
-- [x] `src/mailops/__init__.py` version is `0.1.0`.
-- [x] `CHANGELOG.md` includes `0.1.0` and uses SemVer release history.
-- [ ] Create a signed or annotated `v0.1.0` tag after final validation.
-
-## Security
-
-- [ ] Rotate any temporary Proton Bridge password used during development.
-- [ ] Confirm no Bridge passwords are present in repo files.
-- [ ] Confirm `.env.example` and `examples/config.example.toml` do not contain secrets.
-- [ ] Confirm `MAILOPS_REDACT_LOGS=true` remains the default.
-- [ ] Confirm release notes state that send, delete, bulk archive, and rule application are not implemented.
-
-## Validation
-
-Run from Windows PowerShell for live Proton checks:
+Use the repository virtual environment, following [the harness guide](harness-engineering.md).
 
 ```powershell
-py -m pip install -e ".[dev]"
-$env:PYTHONPATH = "src"
-py -m pytest
-py -m mailops.cli.main --help
-py -m mailops.cli.main doctor
-py -m mailops.cli.main status
-py -m mailops.cli.main demo seed
-py -m mailops.cli.main inspect thread demo-thread-finance
-py -m mailops.cli.main draft --help
-py -m mailops.cli.main rules propose "filter future messages from vendor.example to label Finance"
+.\.venv\Scripts\python.exe scripts/validate.py
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m pip_audit --skip-editable
+.\.venv\Scripts\python.exe -m build --outdir dist/release
+.\.venv\Scripts\python.exe scripts/check_packages.py dist/release
+.\.venv\Scripts\python.exe -m twine check dist/release/*
 ```
 
-Optional live Proton validation:
+Run commands individually and require each exit code to be zero. The shared runner
+uses temporary state and clears inherited mail settings. Inspect the exact wheel
+and source archive; smoke-test the wheel itself from an isolated home. Do not seed
+a demo into the operational mailbox store. Do not upload old artifacts from other
+versions left in `dist/`.
 
-```powershell
-$secure = Read-Host "Proton Bridge password" -AsSecureString
-$bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-$env:MAILOPS_PROTON_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-py -m mailops.cli.main connect proton --profile lm-main --list-folders
-py -m mailops.cli.main sync --profile lm-main --folder INBOX --limit 10
-py -m mailops.cli.main draft create --from-account <operator@example.com> --to <stakeholder@example.com> --subject "Release validation draft" --body "Draft body" --context-ref release:v0.1.0
-py -m mailops.cli.main review batch show batch_xxxxxxxx
-py -m mailops.cli.main apply batch_xxxxxxxx
-py -m mailops.cli.main review batch sync-drafts batch_xxxxxxxx
-Remove-Item Env:MAILOPS_PROTON_PASSWORD
-[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-```
+## Provider validation
 
-## Package Build
+Live acceptance is separate and optional for a release. If requested, follow the
+[Windows runbook](windows-powershell-handoff.md) with an intentional account, bounded
+folder/limit, and secure transient credentials. Never apply an existing real batch
+as a smoke test. Provider writes require approval of that exact reviewed content.
+Record whether validation used fakes, discovery, live reads, or reviewed live drafts.
 
-```powershell
-py -m pip install build twine
-py -m build
-py -m twine check dist/*
-```
+## Publication
 
-Inspect the built sdist/wheel before upload.
-
-## Publish
-
-- [ ] Push the release branch.
-- [ ] Push tag `v0.1.0`.
-- [ ] Create a GitHub Release named `MailOps v0.1.0: Public Alpha` with markdown notes from [releases/v0.1.0.md](releases/v0.1.0.md).
-- [ ] Make the GitHub repository public only after security, license, changelog, and release docs are present.
-- [ ] Publish the package only after `twine check` passes, project URLs are correct, and PyPI credentials or trusted publishing are configured locally.
+Commit the validated candidate and push its intended branch. Verify CI for that
+commit before creating and pushing its annotated SemVer tag. Publish the GitHub
+Release using versioned markdown notes and only the inspected matching artifacts.
+Verify remote branch/tag SHAs and the release's published state/assets afterward.
+GitHub publication does not change or validate an operator's mailbox database.

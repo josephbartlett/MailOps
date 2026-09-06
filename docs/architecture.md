@@ -26,7 +26,7 @@ The policy layer determines what may auto-execute, what requires review, and wha
 - Codex-facing `ask` planner
 - audit exports
 
-## Current scaffold
+## Implemented components
 
 The current repository includes:
 
@@ -53,6 +53,36 @@ The current repository includes:
 6. `review batch sync-drafts` records provider-visible draft metadata after execution.
 7. `rules propose` previews Proton Sieve text without applying provider rules.
 8. `export audit` records proposal, approval, execution, syncback, and rollback events.
+
+## Executable dependency rules
+
+`scripts/check_repo.py` checks imports against the current layers:
+
+| Layer | May import from MailOps |
+| --- | --- |
+| core | core |
+| utils | utils |
+| index | core, index, utils |
+| adapters | core, index, adapters, utils |
+| agent | core, index, agent, utils |
+| review | core, index, adapters, review, utils |
+| demo | core, index, demo, utils |
+| cli | all listed layers |
+
+Adapters currently coordinate ingestion into the index. The index does not depend
+on providers or CLI. Shared models/configuration live in core; execution coordinates
+provider writes in review. This enforces existing boundaries without creating new
+service layers merely for symmetry.
+
+SQLite message identity is scoped to an account. Legacy schema migration preserves
+stored IDs and data transactionally; it cannot reconstruct content already lost to
+older cross-account collisions. IMAP cursors are bound to folder UIDVALIDITY.
+
+Draft execution freezes the proposed envelope, applies action-type risk floors,
+and durably claims each action before attempting a provider write. `executing` and
+`uncertain` actions block retries and rollback, with `attention_required` on the
+batch. A durable claim prevents duplicate concurrent attempts; it does not provide
+an atomic transaction spanning SQLite and IMAP.
 
 ## Planned evolution
 

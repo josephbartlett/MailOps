@@ -65,3 +65,30 @@ See [WSL and Windows Bridge setup](wsl-windows-bridge.md) for the WSL topology.
 - do not assume one Bridge layout across platforms
 - keep discovery separate from sync so explicit overrides remain possible
 - do not auto-send mail or auto-apply rules from the Proton adapter
+
+## Sync and execution integrity
+
+Sync uses read-only mailbox selection and `BODY.PEEK[]`. It validates returned
+UIDs and binds each cursor to UIDVALIDITY. An unknown or changed epoch resets the
+bounded initial sync window and clears stale folder links while retaining indexed
+messages. A failed UID holds the cursor; IMAP range responses at or below the cursor
+are ignored. The same Message-ID in different accounts stays separate locally.
+
+Provider draft execution uses the reviewed recipients and account. A saved profile
+must identify that account; missing envelopes in legacy proposals require recreation
+and review. A durable per-action claim prevents concurrent apply from creating two
+drafts. Interrupted or ambiguous provider attempts remain `executing`/`uncertain`;
+MailOps does not automatically retry or roll back those actions. Inspect Proton
+Drafts and local audit history before recovery. A recovery command that proves
+provider absence and safely resets an action is not implemented yet.
+
+Discovery parses real TOML, including quoted `#` characters, and validates ports
+and security modes. Python 3.10 uses `tomli`; newer Python uses `tomllib`. Keep
+passwords in runtime environment input, away from shell command arguments/config.
+
+New provider references use `proton-draft-v2:` followed by JSON containing mailbox,
+Message-ID, and (when available) UID and UIDVALIDITY. Header-only reconciliation
+checks message identity and searches by Message-ID after epoch changes. Ambiguous
+matches are not reported present. Legacy Message-ID references remain readable;
+legacy UID-only references are reported `unverified` because the original identity
+cannot be proved, and do not trigger a provider lookup.
