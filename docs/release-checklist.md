@@ -1,7 +1,7 @@
 # Release checks
 
 Use [release-process.md](release-process.md) for SemVer and publication rules.
-The current release is 0.2.0; use [its notes](releases/v0.2.0.md) for upgrade details.
+The current release is 0.2.1; use [its notes](releases/v0.2.1.md) for upgrade details.
 
 ## Candidate
 
@@ -12,6 +12,9 @@ The current release is 0.2.0; use [its notes](releases/v0.2.0.md) for upgrade de
   credentials, logs, databases and sidecars, caches, and temporary artifacts.
 - Confirm MIT licensing, real project URLs, secret-free config examples, and the
   unchanged provider safety boundaries.
+- Keep the GitHub About description, documentation link, topics, and package
+  keywords accurate for shipped capabilities. Check README badges and demo assets;
+  social previews must contain public artwork or explicitly synthetic data.
 - Confirm operator authorization for the requested commit/push/tag/release actions.
   A GitHub release does not authorize PyPI publication or a visibility change.
 

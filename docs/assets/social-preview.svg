@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">MailOps — Local-first email workflows</title>
+  <desc id="description">MailOps supports Proton Mail Bridge, a command-line interface and Codex skills. Its operator loop is sync, inspect, triage, draft, review, apply and audit.</desc>
+
+  <!-- Editable vector artwork. Text uses system fonts; no screenshots or external assets. -->
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101d2e"/>
+      <stop offset="1" stop-color="#172b3b"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#navy)"/>
+  <rect y="496" width="1280" height="144" fill="#f2f4ed"/>
+
+  <!-- Wordmark and product description. -->
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="88" y="78" width="48" height="6" rx="3" fill="#59d2bf"/>
+    <text x="153" y="88" fill="#9eb5c5" font-size="19" font-weight="600" letter-spacing="3">EMAIL, WITH A CLEAR NEXT STEP</text>
+    <text x="80" y="246" fill="#f4f6ee" font-size="120" font-weight="700" letter-spacing="-5">MailOps</text>
+    <text x="88" y="324" fill="#f4f6ee" font-size="44" font-weight="400" letter-spacing="-1">Local-first email workflows</text>
+    <text x="90" y="383" fill="#adc3d2" font-size="26" font-weight="400">Proton Mail Bridge · CLI · Codex skills</text>
+  </g>
+
+  <!-- Conceptual envelope symbol, not a depiction of an application UI. -->
+  <g fill="none">
+    <circle cx="1040" cy="268" r="150" stroke="#264352" stroke-width="1.5"/>
+    <circle cx="1040" cy="268" r="121" stroke="#284e59" stroke-width="1.5"/>
+    <path d="M1007 122 A150 150 0 0 1 1187 236" stroke="#59d2bf" stroke-width="4" stroke-linecap="round"/>
+    <path d="m1178 230 10 8 6-12" stroke="#59d2bf" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1071 415 A150 150 0 0 1 893 300" stroke="#59d2bf" stroke-width="4" stroke-linecap="round"/>
+    <path d="m902 306-10-8-6 12" stroke="#59d2bf" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="946" y="204" width="188" height="128" rx="18" fill="#59d2bf" stroke="#59d2bf" stroke-width="3"/>
+    <path d="m958 219 69 55c8 7 18 7 26 0l69-55" stroke="#152c3a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="m958 318 50-43m114 43-50-43" stroke="#152c3a" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- The actual MailOps operator loop, in order. -->
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="600" fill="#192f3d">
+    <text x="88" y="577">Sync</text>
+    <text x="236" y="577">Inspect</text>
+    <text x="412" y="577">Triage</text>
+    <text x="582" y="577">Draft</text>
+    <rect x="726" y="542" width="114" height="52" rx="26" fill="#c9e8df"/>
+    <text x="744" y="577">Review</text>
+    <text x="913" y="577">Apply</text>
+    <text x="1080" y="577">Audit</text>
+  </g>
+  <g fill="none" stroke="#72908f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M174 569h28m-7-6 7 6-7 6"/>
+    <path d="M351 569h28m-7-6 7 6-7 6"/>
+    <path d="M522 569h28m-7-6 7 6-7 6"/>
+    <path d="M677 569h28m-7-6 7 6-7 6"/>
+    <path d="M862 569h28m-7-6 7 6-7 6"/>
+    <path d="M1022 569h28m-7-6 7 6-7 6"/>
+  </g>
+</svg>

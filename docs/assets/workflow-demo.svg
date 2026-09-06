@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1257" viewBox="0 0 1440 1257" role="img" aria-labelledby="title description">
+<title id="title">MailOps synthetic local workflow</title>
+<desc id="description">Selected actual command output from a temporary synthetic mailbox: one invoice search result, two threads waiting on the operator, a local draft proposal, and its pending review. No provider was contacted.</desc>
+<rect width="1440" height="1257" rx="22" fill="#0b1320"/>
+<circle cx="39" cy="35" r="6" fill="#ff7975"/>
+<circle cx="61" cy="35" r="6" fill="#f4c66b"/>
+<circle cx="83" cy="35" r="6" fill="#59d6b2"/>
+<text x="115" y="41" fill="#f3f7fc" font-family="sans-serif" font-size="20" font-weight="700">MailOps</text>
+<text x="1400" y="41" text-anchor="end" fill="#78dfc5" font-family="sans-serif" font-size="16">SYNTHETIC LOCAL DEMO</text>
+<text x="32" y="87" fill="#f3f7fc" font-family="sans-serif" font-size="28" font-weight="700">Search. Triage. Prepare. Review.</text>
+<text x="32" y="114" fill="#a8b7ce" font-family="sans-serif" font-size="16">Recorded CLI output excerpts · example.com fixture · no provider access</text>
+<rect x="24" y="142" width="1392" height="301" rx="10" fill="#111e30" stroke="#293c55"/>
+<text x="42" y="169" fill="#78dfc5" font-family="monospace" font-size="17" font-weight="700">$ mailops search invoice --limit 1; mailops inspect thread demo-thread-finance</text>
+<text x="42" y="195" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">       Search</text>
+<text x="42" y="216" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">┌─────────┬─────────┐</text>
+<text x="42" y="237" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ Field   │ Value   │</text>
+<text x="42" y="258" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">├─────────┼─────────┤</text>
+<text x="42" y="279" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ query   │ invoice │</text>
+<text x="42" y="300" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ account │ all     │</text>
+<text x="42" y="321" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ results │ 1       │</text>
+<text x="42" y="342" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">└─────────┴─────────┘</text>
+<text x="42" y="363" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">[matches table omitted; inspected matching thread excerpt below]</text>
+<text x="42" y="384" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ subject             │ Invoice approval needed                                                               │</text>
+<text x="42" y="405" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">Body preview for demo-message-finance:</text>
+<text x="42" y="426" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">Please confirm whether invoice 1042 is approved for payment.</text>
+<rect x="24" y="459" width="1392" height="301" rx="10" fill="#111e30" stroke="#293c55"/>
+<text x="42" y="486" fill="#78dfc5" font-family="monospace" font-size="17" font-weight="700">$ mailops triage --since 0d</text>
+<text x="42" y="512" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">          Triage</text>
+<text x="42" y="533" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">┌─────────────────┬───────┐</text>
+<text x="42" y="554" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ Field           │ Value │</text>
+<text x="42" y="575" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">├─────────────────┼───────┤</text>
+<text x="42" y="596" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ account         │ all   │</text>
+<text x="42" y="617" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ window          │ 0d    │</text>
+<text x="42" y="638" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ waiting_on_me   │ 2     │</text>
+<text x="42" y="659" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ waiting_on_them │ 1     │</text>
+<text x="42" y="680" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ resolved        │ 1     │</text>
+<text x="42" y="701" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ ambiguous       │ 1     │</text>
+<text x="42" y="722" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ ranked_results  │ 2     │</text>
+<text x="42" y="743" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">└─────────────────┴───────┘</text>
+<rect x="24" y="776" width="1392" height="112" rx="10" fill="#111e30" stroke="#293c55"/>
+<text x="42" y="803" fill="#78dfc5" font-family="monospace" font-size="17" font-weight="700">$ mailops draft create --provider demo_local ...</text>
+<text x="42" y="829" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">Created review batch `batch_34d74eb7` with custom draft `draft_a774315c` from `demo@example.com` to</text>
+<text x="42" y="850" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">vendor@example.com.</text>
+<text x="42" y="871" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">Inspect it with `mailops review batch show batch_34d74eb7`.</text>
+<rect x="24" y="904" width="1392" height="301" rx="10" fill="#111e30" stroke="#293c55"/>
+<text x="42" y="931" fill="#78dfc5" font-family="monospace" font-size="17" font-weight="700">$ mailops review batch show batch_34d74eb7</text>
+<text x="42" y="957" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ status             │ pending                                                     │</text>
+<text x="42" y="978" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ highest_risk       │ medium                                                      │</text>
+<text x="42" y="999" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">[other review fields and tables omitted]</text>
+<text x="42" y="1020" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">Draft refs:</text>
+<text x="42" y="1041" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve"> - draft_id=draft_a774315c account=demo@example.com to=vendor@example.com cc=- bcc=- subject=Invoice 1042</text>
+<text x="42" y="1062" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">follow-up</text>
+<text x="42" y="1083" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">                                       Draft Bodies</text>
+<text x="42" y="1104" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">┌────────────────┬────────────────────────────┬───────────────────────────────────────────┐</text>
+<text x="42" y="1125" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ Draft ID       │ Context Refs               │ Body                                      │</text>
+<text x="42" y="1146" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">├────────────────┼────────────────────────────┼───────────────────────────────────────────┤</text>
+<text x="42" y="1167" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">│ draft_a774315c │ thread:demo-thread-finance │ I will review invoice 1042 and follow up. │</text>
+<text x="42" y="1188" fill="#e2eaf5" font-family="Consolas, DejaVu Sans Mono, monospace" font-size="17" xml:space="preserve">└────────────────┴────────────────────────────┴───────────────────────────────────────────┘</text>
+<text x="32" y="1233" fill="#a8b7ce" font-family="sans-serif" font-size="16">Full commands and unabridged output: docs/demo.md · Proposal remains pending.</text>
+</svg>

@@ -6,6 +6,28 @@ MailOps follows Semantic Versioning. See `docs/release-process.md` for versionin
 
 - No unreleased changes.
 
+## 0.2.1 - 2026-09-06
+
+### Added
+
+- A synthetic terminal workflow demonstration with reproducible local-only commands.
+- Editable social preview artwork for shared repository links.
+- CI, latest-release, and MIT badges with direct links to supporting evidence.
+
+### Changed
+
+- README and alpha guide lead with Proton Mail Bridge workflows, optional Codex skills,
+  release-wheel installation, and an isolated demo separate from live provider setup.
+- Package description and keywords describe supported functionality; removed the
+  unsupported Gmail keyword and unrelated monitoring classifier.
+- Repository About description, documentation link, and twelve relevant GitHub topics.
+
+### Safety Boundaries
+
+- This documentation and packaging patch adds no runtime capabilities or schema changes.
+- Sending, deletion, bulk mutation, provider rule application, and Gmail runtime remain
+  unimplemented. Synthetic demonstrations do not establish live Bridge acceptance.
+
 ## 0.2.0 - 2026-09-06
 
 ### Fixed

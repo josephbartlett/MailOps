@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mailops"
-version = "0.2.0"
-description = "Local-first inbox operations harness for serious multi-account email workflows."
+version = "0.2.1"
+description = "Local-first email CLI for Proton Mail Bridge with search, triage, reviewed drafts, and audit export."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
   { name = "Joey Bartlett" },
 ]
-keywords = ["email", "cli", "operations", "proton", "gmail", "local-first"]
+keywords = ["email", "email-management", "email-triage", "protonmail", "protonmail-bridge", "cli", "sqlite", "local-first", "codex-skills"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -27,7 +27,6 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Communications :: Email",
   "Topic :: Software Development :: Libraries :: Python Modules",
-  "Topic :: System :: Monitoring",
 ]
 dependencies = [
   "pydantic>=2.8,<3.0",
@@ -51,7 +50,7 @@ mailops = "mailops.cli.main:main"
 [project.urls]
 Homepage = "https://github.com/josephbartlett/MailOps"
 Repository = "https://github.com/josephbartlett/MailOps"
-Documentation = "https://github.com/josephbartlett/MailOps/tree/main/docs"
+Documentation = "https://github.com/josephbartlett/MailOps/blob/main/docs/public-alpha.md"
 "Issue Tracker" = "https://github.com/josephbartlett/MailOps/issues"
 
 [tool.hatch.build.targets.wheel]
