@@ -62,6 +62,8 @@ Dependency audits contact a public advisory service with package names/versions;
 they are separate from offline validation and do not upload mailbox data.
 
 Keep the virtual environment's pip current (`python -m pip install --upgrade pip`).
+CI also upgrades its preinstalled setuptools to 83.0.0 or newer so older Python
+runner images do not retain vulnerable bootstrap tooling.
 The development extra requires pytest 9.0.3 or newer to include its temporary-directory
 security fix; see the [upstream release notes](https://github.com/pytest-dev/pytest/releases/tag/9.0.3).
 Twine 7 supports current metadata 2.5 and requires newer Rich; these compatible

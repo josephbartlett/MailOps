@@ -30,6 +30,7 @@ MailOps follows Semantic Versioning. See `docs/release-process.md` for versionin
 
 - Development dependencies include patched pytest (9.0.3+) and repeatable lint/build/advisory tools.
 - Updated Rich and Twine compatibility so validation accepts current wheel metadata (2.5).
+- CI refreshes vulnerable preinstalled setuptools and uses pinned current checkout/setup Actions.
 - Python 3.10 uses `tomli` for Proton configuration; later versions use the standard library.
 - Removed the obsolete demo-seeding placeholder script; use `mailops demo seed`.
 - Legacy drafts without reviewed recipient envelopes require recreation; ambiguous provider attempts require inspection before recovery.
